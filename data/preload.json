@@ -1,0 +1,26 @@
+{
+  "users": [
+    {
+      "name": "admin",
+      "password": "admin"
+    },
+    {
+      "name": "dsc",
+      "password": "dsc"
+    }
+  ],
+  "channels": [
+    {
+      "name": "admin",
+      "owner": "dsc",
+      "members": ["admin"],
+      "topic": "the admin channel"
+    },
+    {
+      "name": "test",
+      "owner": "dsc",
+      "members": ["dsc", "admin"],
+      "topic": "the test channel!"
+    }
+  ]
+}

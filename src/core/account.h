@@ -1,0 +1,73 @@
+#pragma once
+#include <QObject>
+#include <QTcpSocket>
+#include <QByteArray>
+#include <QTimer>
+#include <QSet>
+#include <QPointer>
+#include <QElapsedTimer>
+#include <QDateTime>
+#include <QHash>
+
+#include "globals.h"
+#include "irc/client_connection.h"
+
+class Channel;
+
+class Account : public QObject {
+Q_OBJECT
+
+public:
+  explicit Account(const QByteArray& account_name = "", QObject* parent = nullptr);
+  static QSharedPointer<Account> create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation);
+
+  bool verifyPassword(const QByteArray &candidate) const;
+
+  static QSharedPointer<Account> get(const QByteArray &account_name);
+  static QSharedPointer<Account> get_or_create(const QByteArray &account_name);
+
+  void setRandomUID();
+
+  QByteArray name();
+  void setName(const QByteArray &name);
+
+  QByteArray nick();
+  bool setNick(const QByteArray &nick);
+
+  [[nodiscard]] QByteArray host() const {
+    if (m_host.isEmpty())
+      return g::defaultHost;
+    return m_host;
+  }
+  void setHost(const QByteArray &host);
+
+  [[nodiscard]] QByteArray prefix(const int conn_id = -1) {
+    if (connections.size() > 0 && conn_id != -1) {
+      const auto conn = connections.at(conn_id);
+      return conn->prefix();
+    }
+    return {};
+  }
+
+  [[nodiscard]] bool login(const QString& username, const QString& password) { return true; }
+
+  static void channel_join(QSharedPointer<Account> &acc, const QByteArray& channel_name);
+  void broadcast_nick_changed(const QByteArray& msg) const;
+
+  void add_channel(const QByteArray &channel);
+  void add_connection(irc::client_connection *ptr);
+  ~Account() override;
+
+  QByteArray uid;
+  QByteArray m_name;
+  QByteArray m_nick;
+  QByteArray password;
+  QByteArray m_host;
+  QDateTime creation_date;
+
+  QList<irc::client_connection*> connections;
+  QHash<QByteArray, QSharedPointer<Channel>> channels;
+
+signals:
+  void nickChanged(const QByteArray& old_nick, const QByteArray& new_nick);
+};
