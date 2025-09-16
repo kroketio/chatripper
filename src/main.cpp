@@ -10,6 +10,7 @@
 
 int main(int argc, char *argv[]) {
   irc::initializeUserModesLookup();
+  irc::initializeChannelModesLookup();
 
   const QCoreApplication app(argc, argv);
   QCoreApplication::setApplicationName("qircd");

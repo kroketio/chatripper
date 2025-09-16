@@ -43,7 +43,19 @@ namespace irc {
     QString description;
   };
 
+  struct ChannelModeInfo {
+    ChannelModes mode;
+    char letter;
+    QString description;
+  };
+
+  // Lookups for user modes
   extern QMap<UserModes, UserModeInfo> userModesLookup;
   extern QMap<QChar, UserModes> userModesLookupLetter;
   void initializeUserModesLookup();
+
+  // Lookups for channel modes
+  extern QMap<ChannelModes, ChannelModeInfo> channelModesLookup;
+  extern QMap<QChar, ChannelModes> channelModesLookupLetter;
+  void initializeChannelModesLookup();
 }

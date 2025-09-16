@@ -1,6 +1,7 @@
 #include "modes.h"
 
 namespace irc {
+  // user
   QMap<UserModes, UserModeInfo> userModesLookup = {};
   QMap<QChar, UserModes> userModesLookupLetter = {};
 
@@ -28,6 +29,30 @@ namespace irc {
     for (const auto&[mode, letter, desc] : rawModes) {
       userModesLookup.insert(mode, UserModeInfo{mode, letter, QString::fromUtf8(desc)});
       userModesLookupLetter.insert(QChar(letter), mode);
+    }
+  }
+
+  // channel
+  QMap<ChannelModes, ChannelModeInfo> channelModesLookup = {};
+  QMap<QChar, ChannelModes> channelModesLookupLetter = {};
+
+  void initializeChannelModesLookup() {
+    struct RawMode { ChannelModes mode; char letter; const char* desc; };
+    constexpr RawMode rawModes[] = {
+      {ChannelModes::INVITE_ONLY,     'i', "invite-only"},
+      {ChannelModes::MODERATED,       'm', "moderated (only voiced/ops may speak)"},
+      {ChannelModes::NO_OUTSIDE_MSGS, 'n', "no messages from outside"},
+      {ChannelModes::QUIET,           'q', "quiet (mute instead of kick)"},
+      {ChannelModes::SECRET,          's', "secret channel (hidden from /LIST)"},
+      {ChannelModes::TOPIC_PROTECTED, 't', "topic protected (only ops can set)"},
+      {ChannelModes::BAN,             'b', "ban mask"},
+      {ChannelModes::KEY,             'k', "password required"},
+      {ChannelModes::LIMIT,           'l', "user limit"}
+    };
+
+    for (const auto& [mode, letter, desc] : rawModes) {
+      channelModesLookup.insert(mode, ChannelModeInfo{mode, letter, QString::fromUtf8(desc)});
+      channelModesLookupLetter.insert(QChar(letter), mode);
     }
   }
 }
