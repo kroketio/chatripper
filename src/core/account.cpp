@@ -138,12 +138,14 @@ bool Account::setNick(const QByteArray &nick) {
 void Account::channel_join(QSharedPointer<Account> &acc, const QByteArray& channel_name) {
   const auto ptr = Channel::get_or_create(channel_name);
   ptr->join(acc);
+}
 
-  // for (const auto& conn: connections) {
-  //   if (!conn->channels.contains(channel_name)) {
-  //     conn->channel_join(channel_name, "");
-  //   }
-  // }
+void Account::channel_part(QSharedPointer<Account> &acc, const QByteArray& channel_name, const QByteArray& message) {
+  if (!g::ctx->channels.contains(channel_name))
+    return;
+
+  const auto ptr = Channel::get(channel_name);
+  ptr->part(acc, message);
 }
 
 void Account::broadcast_nick_changed(const QByteArray& msg) const {

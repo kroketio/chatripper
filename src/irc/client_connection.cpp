@@ -293,6 +293,15 @@ namespace irc {
     send_raw("366 " + nick + " " + channel->name() + " :End of NAMES list");
   }
 
+  void client_connection::channel_part(const QByteArray &channel_name, const QByteArray &message) {
+    // local bookkeeping
+    const auto ptr = Channel::get(channel_name);
+    channel_members.remove(ptr);
+    channels.remove(channel_name);
+
+    reply_self("PART", ":#" + channel_name);
+  }
+
   void client_connection::handleJOIN(const QList<QByteArray> &args) {
     if (args.isEmpty()) {
       reply_num(461, "JOIN :Not enough parameters");
@@ -311,46 +320,33 @@ namespace irc {
     }
   }
 
-  void client_connection::partChannel(QSharedPointer<Channel> channel, const QByteArray &reason) {
-    // if (!channels.contains(ch))
-    //   return;
-    //
-    // QByteArray partLine = ":" + prefix() + " PART " + ch->name();
-    // if (!reason.isEmpty())
-    //   partLine += " :" + reason;
-    //
-    // partLine += "\r\n";
-    // for (const auto& acc: ch->members()) {
-    //   for (const auto& c: acc->connections()) {
-    //     c->m_socket->write(partLine);
-    //   }
-    // }
-    //
-    // ch->remove(m_account);
-    // channels.remove(ch);
-    // m_server->removeChannelIfEmpty(ch);
-  }
-
   void client_connection::handlePART(const QList<QByteArray> &args) {
-    // if (args.isEmpty()) {
-    //   replyNumeric(461, nick, "PART :Not enough parameters");
-    //   return;
-    // }
-    // QList<QByteArray> chans = args[0].split(',');
-    // const QByteArray reason = args.size() > 1 ? args[1] : QByteArray();
-    // for (const auto &c: chans) {
-    //   // find channel
-    //   Channel *found = nullptr;
-    //   for (Channel *ch: std::as_const(channels))
-    //     if (ircLower(ch->name()) == ircLower(c)) {
-    //       found = ch;
-    //       break;
-    //     }
-    //   if (found)
-    //     partChannel(found, reason);
-    //   else
-    //     sendRaw("442 " + nick + " " + c + " :You're not on that channel");
-    // }
+    if (args.isEmpty()) {
+      reply_num(461, "PART :Not enough parameters");
+      return;
+    }
+
+    // channels list
+    auto chans = args.at(0).split(',');
+
+    // optional part message
+    QByteArray message;
+    if (args.size() > 1) {
+      message = args.at(1);
+    }
+
+    for (auto& _name : chans) {
+      if (!_name.startsWith("#"))
+        continue;
+
+      auto channel_name = _name.mid(1);
+      if (!channels.contains(channel_name))
+        continue;
+
+      m_account->channel_part(m_account, channel_name, message);
+    }
+
+    // sendRaw("442 " + nick + " " + c + " :You're not on that channel");
   }
 
   // @TODO: support account-tag https://ircv3.net/specs/extensions/account-tag

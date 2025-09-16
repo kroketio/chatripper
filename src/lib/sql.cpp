@@ -326,7 +326,6 @@ QSharedPointer<Channel> SQL::channel_get_or_create(const QByteArray &name, const
     ? QVariant(QMetaType(QMetaType::QByteArray))
     : QVariant(account_owner_id));
 
-
   if (!insertQuery.exec()) {
     qCritical() << "channel_get_or_create insert error:" << insertQuery.lastError().text();
     return nullptr;

@@ -18,6 +18,7 @@ public:
   [[nodiscard]] bool has(const QByteArray &account_name) const;
   void join(const QByteArray &account_name);
   void join(QSharedPointer<Account> &account);
+  void part(QSharedPointer<Account> &account, const QByteArray &message = "");
   void leave(const QByteArray &account_name);
 
   static QSharedPointer<Channel> get(const QByteArray &channel_name);

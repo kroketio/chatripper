@@ -50,9 +50,10 @@ namespace irc {
     QByteArray realname;
 
     QMap<QByteArray, QSharedPointer<Channel>> channels;
-    QMap<QSharedPointer<Channel>, QList<QSharedPointer<Account>>> channel_members;
+    QMap<QSharedPointer<Channel>, QSet<QSharedPointer<Account>>> channel_members;
 
     void channel_join(const QByteArray &channel_name, const QByteArray &password);
+    void channel_part(const QByteArray &channel_name, const QByteArray &message = "");
     void channel_send_topic(const QByteArray &channel_name, const QByteArray &topic);
     void partChannel(QSharedPointer<Channel> channel, const QByteArray &reason);
 

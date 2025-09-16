@@ -26,8 +26,40 @@ QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByt
   return channel;
 }
 
+void Channel::part(QSharedPointer<Account> &account, const QByteArray &message) {
+  const auto chan_ptr = get(m_name);
+  if (!m_members.contains(account))
+    return;
+
+  // part the various connections
+  for (const auto& conn: account->connections) {
+    if (conn->channels.contains(m_name))
+      conn->channel_part(m_name, message);
+  }
+
+  // notify channel participants
+  for (const auto& member: m_members) {
+    if (member->uid == account->uid) continue;
+
+    for (const auto& conn: member->connections) {
+      if (conn->channel_members[chan_ptr].contains(account)) {
+        auto acc_prefix = account->prefix(0);
+
+        // @TODO: move IRC related code to client_connection
+        QByteArray reason = message.isEmpty() ? "" : " :" + message;
+        const QByteArray msg = ":" + acc_prefix + " PART #" + this->name() + reason + "\r\n";
+        conn->m_socket->write(msg);
+
+        // move this too
+        if (conn->channel_members.contains(chan_ptr))
+          conn->channel_members.remove(chan_ptr);
+      }
+    }
+  }
+}
+
 void Channel::join(QSharedPointer<Account> &account) {
-  const auto chan_ptr = get_or_create(m_name);
+  const auto chan_ptr = get(m_name);
 
   if (!m_members.contains(account)) {
     m_members << account;
@@ -41,7 +73,7 @@ void Channel::join(QSharedPointer<Account> &account) {
       conn->channel_join(m_name, "");
   }
 
-  // let channel participants know
+  // notify channel participants
   for (const auto& member: m_members) {
     if (member->uid == account->uid) continue;
 
@@ -52,20 +84,14 @@ void Channel::join(QSharedPointer<Account> &account) {
         // @TODO: move IRC related code to client_connection
         const QByteArray msg = ":" + acc_prefix + " JOIN :#" + this->name() + "\r\n";
         conn->m_socket->write(msg);
+
+        // move this too
+        if (!conn->channel_members.contains(chan_ptr))
+          conn->channel_members[chan_ptr] = {};
+        conn->channel_members[chan_ptr] << account;
       }
     }
   }
-
-}
-
-void Channel::join(const QByteArray &account_name) {
-
-}
-
-void Channel::leave(const QByteArray &username) {
-  // if (m_members.remove(ptr) > 0) {
-    // emit memberRemoved(ptr);
-  // }
 }
 
 void Channel::setTopic(const QByteArray &t) {

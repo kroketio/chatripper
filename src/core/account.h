@@ -52,6 +52,7 @@ public:
   [[nodiscard]] bool login(const QString& username, const QString& password) { return true; }
 
   static void channel_join(QSharedPointer<Account> &acc, const QByteArray& channel_name);
+  static void channel_part(QSharedPointer<Account> &acc, const QByteArray& channel_name, const QByteArray& message);
   void broadcast_nick_changed(const QByteArray& msg) const;
 
   void add_channel(const QByteArray &channel);
