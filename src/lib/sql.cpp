@@ -322,7 +322,10 @@ QSharedPointer<Channel> SQL::channel_get_or_create(const QByteArray &name, const
   insertQuery.prepare("INSERT INTO channels (id, name, account_owner_id) VALUES (?, ?, ?)");
   insertQuery.addBindValue(newId);
   insertQuery.addBindValue(name);
-  insertQuery.addBindValue(account_owner_id.isEmpty() ? QVariant(QVariant::ByteArray) : QVariant(account_owner_id));
+  insertQuery.addBindValue(account_owner_id.isEmpty()
+    ? QVariant(QMetaType(QMetaType::QByteArray))
+    : QVariant(account_owner_id));
+
 
   if (!insertQuery.exec()) {
     qCritical() << "channel_get_or_create insert error:" << insertQuery.lastError().text();
