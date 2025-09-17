@@ -5,6 +5,7 @@
 #include <QPointer>
 
 #include "core/account.h"
+#include "irc/modes.h"
 
 class Account;
 
@@ -13,7 +14,7 @@ class Channel final : public QObject {
 
 public:
   explicit Channel(const QByteArray &name, QObject *parent = nullptr);
-  static QSharedPointer<Channel> create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &ownerId, const QDateTime &creation);
+  static QSharedPointer<Channel> create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &topic, const QByteArray &ownerId, const QDateTime &creation);
 
   [[nodiscard]] bool has(const QByteArray &account_name) const;
   void join(const QByteArray &account_name);
@@ -40,6 +41,8 @@ public:
 
   [[nodiscard]] QByteArray accountOwnerId() const { return m_account_owner_id; }
   void setAccountOwnerId(const QByteArray &uuidv4);
+
+  Flags<irc::ChannelModes> channel_modes;
 
   QByteArray uid;
   QDateTime date_creation;

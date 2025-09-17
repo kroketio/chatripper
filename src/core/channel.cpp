@@ -10,7 +10,7 @@ bool Channel::has(const QByteArray &username) const {
   return true;
 }
 
-QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &ownerId, const QDateTime &creation) {
+QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &topic, const QByteArray &ownerId, const QDateTime &creation) {
   auto const ctx = Ctx::instance();
   const auto it = ctx->channels.find(name);
   if (it != ctx->channels.end())
@@ -20,6 +20,7 @@ QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByt
   channel->uid = id;
   channel->setName(name);
   channel->setAccountOwnerId(ownerId);
+  channel->setTopic(topic);
   channel->date_creation = creation;
 
   ctx->channels[name] = channel;
@@ -43,16 +44,7 @@ void Channel::part(QSharedPointer<Account> &account, const QByteArray &message) 
 
     for (const auto& conn: member->connections) {
       if (conn->channel_members[chan_ptr].contains(account)) {
-        auto acc_prefix = account->prefix(0);
-
-        // @TODO: move IRC related code to client_connection
-        QByteArray reason = message.isEmpty() ? "" : " :" + message;
-        const QByteArray msg = ":" + acc_prefix + " PART #" + this->name() + reason + "\r\n";
-        conn->m_socket->write(msg);
-
-        // move this too
-        if (conn->channel_members.contains(chan_ptr))
-          conn->channel_members.remove(chan_ptr);
+        conn->channel_part(account, chan_ptr, message);
       }
     }
   }
@@ -79,16 +71,7 @@ void Channel::join(QSharedPointer<Account> &account) {
 
     for (const auto& conn: member->connections) {
       if (!conn->channel_members[chan_ptr].contains(account)) {
-        auto acc_prefix = account->prefix(0);
-
-        // @TODO: move IRC related code to client_connection
-        const QByteArray msg = ":" + acc_prefix + " JOIN :#" + this->name() + "\r\n";
-        conn->m_socket->write(msg);
-
-        // move this too
-        if (!conn->channel_members.contains(chan_ptr))
-          conn->channel_members[chan_ptr] = {};
-        conn->channel_members[chan_ptr] << account;
+        conn->channel_join(chan_ptr, account, "");
       }
     }
   }

@@ -152,7 +152,7 @@ namespace irc {
     QString result; // actual modes that were changed
 
     bool invalid = false;
-    Flags<UserModes> _modes = modes;
+    Flags<UserModes> _modes = user_modes;
 
     // start from second character (skip +/-)
     for (int i = 1; i < requested_modes.size(); ++i) {
@@ -182,7 +182,7 @@ namespace irc {
       return reply_num(501, "Unknown MODE flag");
 
     if (!result.isEmpty()) {
-      modes = _modes;
+      user_modes = _modes;
       const QByteArray modePrefix = adding ? "+" : "-";
       send_raw("MODE " + nick + " :" + modePrefix + result.toUtf8());
       return;
@@ -246,6 +246,17 @@ namespace irc {
 
   }
 
+  void client_connection::channel_join(const QSharedPointer<Channel> &channel, const QSharedPointer<Account> &account, const QByteArray &password) {
+    const auto acc_prefix = account->prefix(0);
+
+    const QByteArray msg = ":" + acc_prefix + " JOIN :#" + channel->name() + "\r\n";
+    m_socket->write(msg);
+
+    if (!channel_members.contains(channel))
+      channel_members[channel] = {};
+    channel_members[channel] << account;
+  }
+
   void client_connection::channel_join(const QByteArray &channel_name, const QByteArray &password) {
     if (m_account == nullptr)
       return;
@@ -272,9 +283,11 @@ namespace irc {
 
     // topic
     if (channel->topic().isEmpty()) {
-      reply_num(331, channel->name() + " :No topic is set");
+      reply_num(331, "#" + channel->name() + " :No topic is set");
     } else {
-      reply_num(332, channel->name() + " :" + channel->topic());
+      // :irc.local 333 bla #test bbb!dsc@127.0.0.1 :1758051783.
+      // @TODO: implement RPL_TOPICWHOTIME^
+      send_raw("332 " + nick + " #" + channel->name() + " :" + channel->topic());
     }
 
     // names
@@ -290,7 +303,18 @@ namespace irc {
 
     const QByteArray namesPrefix = "353 " + nick + " = " + channel->name() + " :";
     send_raw(namesPrefix + names.join(" "));
-    send_raw("366 " + nick + " " + channel->name() + " :End of NAMES list");
+    send_raw("366 " + nick + " " + "#" + channel->name() + " :End of NAMES list");
+  }
+
+  void client_connection::channel_part(const QSharedPointer<Account> &account, const QSharedPointer<Channel> &channel, const QByteArray &message) {
+    const auto acc_prefix = account->prefix(0);
+
+    const QByteArray reason = message.isEmpty() ? "" : " :" + message;
+    const QByteArray msg = ":" + acc_prefix + " PART #" + channel->name() + reason + "\r\n";
+    m_socket->write(msg);
+
+    if (channel_members.contains(channel))
+      channel_members.remove(channel);
   }
 
   void client_connection::channel_part(const QByteArray &channel_name, const QByteArray &message) {

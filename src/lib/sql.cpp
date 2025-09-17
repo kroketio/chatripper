@@ -75,6 +75,7 @@ void SQL::create_schema() {
     CREATE TABLE IF NOT EXISTS channels (
       id BLOB PRIMARY KEY,
       name TEXT UNIQUE NOT NULL,
+      topic TEXT,
       account_owner_id BLOB,
       creation_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
@@ -234,6 +235,7 @@ QList<QSharedPointer<Channel>> SQL::account_get_channels(const QByteArray &accou
     channels.append(Channel::create_from_db(
       q.value("id").toByteArray(),
       q.value("name").toByteArray(),
+      q.value("topic").toByteArray(),
       q.value("account_owner_id").toByteArray(),
       q.value("creation_date").toDateTime()
     ));
@@ -292,7 +294,7 @@ bool SQL::channel_exists(const QByteArray &name) {
   return q.next();
 }
 
-QSharedPointer<Channel> SQL::channel_get_or_create(const QByteArray &name, const QByteArray &account_owner_id) {
+QSharedPointer<Channel> SQL::channel_get_or_create(const QByteArray &name, const QByteArray &topic, const QByteArray &account_owner_id) {
   auto it = g::ctx->channels.find(name);
   if (it != g::ctx->channels.end() && !it.value().isNull()) {
     return it.value();
@@ -311,6 +313,7 @@ QSharedPointer<Channel> SQL::channel_get_or_create(const QByteArray &name, const
     return Channel::create_from_db(
       q.value("id").toByteArray(),
       q.value("name").toByteArray(),
+      q.value("topic").toByteArray(),
       q.value("account_owner_id").toByteArray(),
       q.value("creation_date").toDateTime()
     );
@@ -319,9 +322,10 @@ QSharedPointer<Channel> SQL::channel_get_or_create(const QByteArray &name, const
   QByteArray newId = generateUuid();
 
   QSqlQuery insertQuery(getInstance());
-  insertQuery.prepare("INSERT INTO channels (id, name, account_owner_id) VALUES (?, ?, ?)");
+  insertQuery.prepare("INSERT INTO channels (id, name, topic, account_owner_id) VALUES (?, ?, ?, ?)");
   insertQuery.addBindValue(newId);
   insertQuery.addBindValue(name);
+  insertQuery.addBindValue(topic);
   insertQuery.addBindValue(account_owner_id.isEmpty()
     ? QVariant(QMetaType(QMetaType::QByteArray))
     : QVariant(account_owner_id));
@@ -331,7 +335,7 @@ QSharedPointer<Channel> SQL::channel_get_or_create(const QByteArray &name, const
     return nullptr;
   }
 
-  return Channel::create_from_db(newId, name, account_owner_id, QDateTime::currentDateTime());
+  return Channel::create_from_db(newId, name, topic, account_owner_id, QDateTime::currentDateTime());
 }
 
 QList<QSharedPointer<Channel>> SQL::channel_get_all() {
@@ -355,6 +359,7 @@ QList<QSharedPointer<Channel>> SQL::channel_get_all() {
       channels.append(Channel::create_from_db(
         q.value("id").toByteArray(),
         q.value("name").toByteArray(),
+        q.value("topic").toByteArray(),
         q.value("account_owner_id").toByteArray(),
         q.value("creation_date").toDateTime()
       ));
@@ -578,13 +583,14 @@ bool SQL::preload_from_file(const QString &path) {
     QJsonObject obj = val.toObject();
     QByteArray cname = obj["name"].toString().toUtf8();
     QString ownerName = obj["owner"].toString();
+    QByteArray topic = obj["topic"].toString().toUtf8();
 
     QByteArray ownerId;
     if (accountsByName.contains(ownerName)) {
       ownerId = accountsByName[ownerName]->uid;
     }
 
-    auto channel = channel_get_or_create(cname, ownerId);
+    auto channel = channel_get_or_create(cname, topic, ownerId);
     if (!channel) {
       qCritical() << "Failed to create channel:" << cname;
       continue;

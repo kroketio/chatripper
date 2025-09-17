@@ -35,10 +35,10 @@ namespace irc {
 
     Flags<ConnectionSetupTasks> setup_tasks;
     Flags<PROTOCOL_CAPABILITY> capabilities;
-    Flags<UserModes> modes;
+    Flags<UserModes> user_modes;
 
     [[nodiscard]] bool is_bot() const {
-      return modes.has(UserModes::BEEP_BOOP_BOT);
+      return user_modes.has(UserModes::BEEP_BOOP_BOT);
     }
 
     QTcpSocket *m_socket;
@@ -52,10 +52,9 @@ namespace irc {
     QMap<QByteArray, QSharedPointer<Channel>> channels;
     QMap<QSharedPointer<Channel>, QSet<QSharedPointer<Account>>> channel_members;
 
+    void channel_join(const QSharedPointer<Channel> &channel, const QSharedPointer<Account> &account, const QByteArray &password);
     void channel_join(const QByteArray &channel_name, const QByteArray &password);
-    void channel_part(const QByteArray &channel_name, const QByteArray &message = "");
     void channel_send_topic(const QByteArray &channel_name, const QByteArray &topic);
-    void partChannel(QSharedPointer<Channel> channel, const QByteArray &reason);
 
     // QByteArray nickname() const { return nick; }
     // QByteArray username() const { return user; }
@@ -64,6 +63,9 @@ namespace irc {
     void send_raw(const QByteArray &line);
     void reply_num(int code, const QByteArray &text);
     void reply_self(const QByteArray &command, const QByteArray &args);
+
+    void channel_part(const QSharedPointer<Account> &account, const QSharedPointer<Channel> &channel, const QByteArray &message = "");
+    void channel_part(const QByteArray &channel_name, const QByteArray &message = "");
 
     bool change_nick(const QByteArray &new_nick);
     bool change_nick(const QSharedPointer<Account> &acc, const QByteArray &old_nick, const QByteArray &new_nick);
