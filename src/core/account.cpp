@@ -74,18 +74,18 @@ QByteArray Account::nick() {
 }
 
 bool Account::setNick(const QByteArray &nick) {
-  if (!nick.isEmpty() && m_nick == nick)
-    return true;
+  if (nick.isEmpty())
+    return false;
+
+  auto self = g::ctx->accounts_lookup_uuid.value(uid);
 
   const QByteArray nick_lower = nick.toLower();
   const QByteArray nick_old = m_nick;
   const QByteArray nick_old_lower = m_nick.toLower();
 
-  if (g::ctx->irc_nicks.contains(nick_lower))
+  if (g::ctx->irc_nicks.contains(nick_lower) && g::ctx->irc_nicks.value(nick_lower) != self)
     // @TODO: better return errors
     return false;
-
-  auto self = g::ctx->accounts_lookup_uuid.value(uid);
 
   g::ctx->irc_nicks.remove(nick_lower);
   g::ctx->irc_nicks[nick_lower] = self;

@@ -385,7 +385,7 @@ namespace irc {
 
   void client_connection::self_message(const QByteArray& target, const QByteArray &message) const {
     if (capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE)) {
-      const QByteArray msg = ":" + prefix() + " PRIVMSG " + "bla" + " :" + message + "\r\n";
+      const QByteArray msg = ":" + prefix() + " PRIVMSG " + target + " :" + message + "\r\n";
       m_socket->write(msg);
     }
   }
@@ -565,10 +565,11 @@ namespace irc {
   }
 
   void client_connection::handleQUIT(const QList<QByteArray> &args) {
-    // const QByteArray reason = args.isEmpty() ? QByteArray("Client Quit") : args[0];
+    const QByteArray reason = args.isEmpty() ? QByteArray("Client Quit") : args[0];
+    // QByteArray line = ":" + prefix() + " QUIT :" + reason + "\r\n";
+
     // // broadcast quits
     // for (Channel *ch: std::as_const(channels)) {
-    //   QByteArray line = ":" + prefix() + " QUIT :" + reason + "\r\n";
     //   for (auto const &acc: ch->members()) {
     //     for (const auto &c: acc->connections()) {
     //       if (c != this) {
@@ -576,12 +577,10 @@ namespace irc {
     //       }
     //     }
     //   }
-    //
     //   ch->remove(m_account);
     //   m_server->removeChannelIfEmpty(ch);
     // }
-    // channels.clear();
-    // m_socket->disconnectFromHost();
+    m_socket->disconnectFromHost();
   }
 
   void client_connection::handleNAMES(const QList<QByteArray> &args) {
@@ -984,5 +983,7 @@ namespace irc {
     }
   }
 
-  client_connection::~client_connection() { m_socket->deleteLater(); }
+  client_connection::~client_connection() {
+    m_socket->deleteLater();
+  }
 }
