@@ -836,8 +836,8 @@ namespace irc {
     if (account_exists) {
       const auto account = g::ctx->accounts_lookup_name[username];
       if (account->verifyPassword(password)) {
+        account->merge(m_account);
         m_account = account;
-        m_account->add_connection(this);
 
         reply_num(900, "You are now logged in as " + username);
         reply_num(903, "SASL authentication successful");

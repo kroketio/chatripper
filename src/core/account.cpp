@@ -77,7 +77,7 @@ bool Account::setNick(const QByteArray &nick) {
   if (nick.isEmpty())
     return false;
 
-  auto self = g::ctx->accounts_lookup_uuid.value(uid);
+  const auto self = g::ctx->accounts_lookup_uuid.value(uid);
 
   const QByteArray nick_lower = nick.toLower();
   const QByteArray nick_old = m_nick;
@@ -87,7 +87,7 @@ bool Account::setNick(const QByteArray &nick) {
     // @TODO: better return errors
     return false;
 
-  g::ctx->irc_nicks.remove(nick_lower);
+  g::ctx->irc_nicks.remove(nick_old);
   g::ctx->irc_nicks[nick_lower] = self;
 
   m_nick = nick;
@@ -96,12 +96,10 @@ bool Account::setNick(const QByteArray &nick) {
 
   // gather accounts that need to be notified
   QSet<QSharedPointer<Account>> l;
-  auto len = channels.size();
-  int wqegwg = 1;
 
   for (auto it = channels.begin(); it != channels.end(); ++it) {
     // QByteArray key = it.key();
-    QSharedPointer<Channel> &channel = it.value();
+    const QSharedPointer<Channel> &channel = it.value();
     for (const auto& acc: channel->members()) {
       l.insert(acc);
     }
@@ -150,10 +148,9 @@ void Account::channel_part(QSharedPointer<Account> &acc, const QByteArray& chann
 void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, const QByteArray &message) {
   // @TODO: deal with history when we are offline
 
-  const auto ptr = get(uid);
-  for (const auto& _conn: dest->connections) {
+  const auto ptr = get_by_uid(uid);
+  for (const auto& _conn: dest->connections)
     _conn->message(ptr, m_nick, message);
-  }
 
   // send to ourselves (other connected clients)
   for (const auto& _conn: connections) {
@@ -170,10 +167,18 @@ void Account::broadcast_nick_changed(const QByteArray& msg) const {
 }
 
 void Account::add_connection(irc::client_connection *ptr) {
-
-
   connect(ptr, &irc::client_connection::disconnected, [=] {
     connections.removeAll(ptr);
+
+    // when unregistered, we need to clean the global account roster
+    if (!is_logged_in()) {
+      g::ctx->irc_nicks.remove(m_nick);
+
+      if (const auto __ptr = g::ctx->accounts_lookup_uuid.value(uid); !__ptr.isNull()) {
+        g::ctx->accounts.remove(__ptr);
+        g::ctx->accounts_lookup_uuid.remove(uid);
+      }
+    }
   });
 
   connect(ptr, &QObject::destroyed, this, [this, ptr] {
@@ -183,16 +188,16 @@ void Account::add_connection(irc::client_connection *ptr) {
   connections << ptr;
 }
 
-QSharedPointer<Account> Account::get(const QByteArray &uid) {
-  // @TODO: slow qlist
-  for (const auto& ptr: g::ctx->accounts) {
-    if (ptr->uid == uid)
-      return ptr;
-  }
-  return nullptr;
+QSharedPointer<Account> Account::get_by_uid(const QByteArray &uid) {
+  return g::ctx->accounts_lookup_uuid.value(uid);
+}
+
+QSharedPointer<Account> Account::get_by_name(const QByteArray &name) {
+  return g::ctx->accounts_lookup_name.value(name);
 }
 
 QSharedPointer<Account> Account::get_or_create(const QByteArray &account_name) {
+  // @TODO: slow qlist
   for (const auto& ptr: g::ctx->accounts) {
     if (ptr->name() == account_name)
       return ptr;
@@ -202,6 +207,22 @@ QSharedPointer<Account> Account::get_or_create(const QByteArray &account_name) {
   auto ptr = QSharedPointer<Account>(account);
   g::ctx->accounts << ptr;
   return ptr;
+}
+
+// account merging; we consume account `from` and adopt its connections
+void Account::merge(const QSharedPointer<Account> &from) {
+  if (from->is_logged_in()) {
+    qCritical() << "cannot merge 2 logged in accounts";
+    return;
+  }
+
+  for (const auto& conn: from->connections)
+    add_connection(conn);
+
+  g::ctx->accounts_lookup_uuid.remove(from->uid);
+  g::ctx->accounts.remove(from);
+
+  // @TODO: maybe update the db, update message authors.. but probably not
 }
 
 Account::~Account() {

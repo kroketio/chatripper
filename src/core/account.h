@@ -23,8 +23,11 @@ public:
 
   bool verifyPassword(const QByteArray &candidate) const;
 
-  static QSharedPointer<Account> get(const QByteArray &account_name);
+  static QSharedPointer<Account> get_by_uid(const QByteArray &uid);
+  static QSharedPointer<Account> get_by_name(const QByteArray &name);
   static QSharedPointer<Account> get_or_create(const QByteArray &account_name);
+
+  void merge(const QSharedPointer<Account> &from);
 
   void message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, const QByteArray &message);
 
@@ -53,6 +56,7 @@ public:
   }
 
   [[nodiscard]] bool login(const QString& username, const QString& password) { return true; }
+  [[nodiscard]] bool is_logged_in() { return !m_name.isEmpty(); }
 
   static void channel_join(QSharedPointer<Account> &acc, const QByteArray& channel_name);
   static void channel_part(QSharedPointer<Account> &acc, const QByteArray& channel_name, const QByteArray& message);

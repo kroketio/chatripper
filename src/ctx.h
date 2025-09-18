@@ -32,7 +32,7 @@ public:
 
   irc::Server *irc_server;
 
-  QList<QSharedPointer<Account>> accounts;
+  QSet<QSharedPointer<Account>> accounts;
   QHash<QByteArray, QSharedPointer<Account>> accounts_lookup_name;
   QHash<QByteArray, QSharedPointer<Account>> accounts_lookup_uuid;
 
