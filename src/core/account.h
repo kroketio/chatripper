@@ -26,6 +26,8 @@ public:
   static QSharedPointer<Account> get(const QByteArray &account_name);
   static QSharedPointer<Account> get_or_create(const QByteArray &account_name);
 
+  void message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, const QByteArray &message);
+
   void setRandomUID();
 
   QByteArray name();
@@ -46,7 +48,8 @@ public:
       const auto conn = connections.at(conn_id);
       return conn->prefix();
     }
-    return {};
+
+    throw std::runtime_error("No prefix found, DEBUG ME");
   }
 
   [[nodiscard]] bool login(const QString& username, const QString& password) { return true; }

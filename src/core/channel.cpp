@@ -4,7 +4,12 @@
 #include "ctx.h"
 #include "lib/globals.h"
 
-Channel::Channel(const QByteArray &name, QObject *parent) : QObject(parent), m_name(name) {}
+Channel::Channel(const QByteArray &name, QObject *parent) : QObject(parent), m_name(name) {
+  channel_modes.set(
+    irc::ChannelModes::NO_OUTSIDE_MSGS,
+    irc::ChannelModes::TOPIC_PROTECTED
+  );
+}
 
 bool Channel::has(const QByteArray &username) const {
   return true;
@@ -148,4 +153,94 @@ void Channel::addMembers(QList<QSharedPointer<Account>> accounts) {
     //   // this->onNickChanged(acc, old_nick, new_nick);
     // });
   }
+}
+
+void Channel::addBan(const QByteArray &mask) {
+  if (!mask.isEmpty()) {
+    m_ban_masks.insert(mask);
+    // TODO: persist or notify members if desired
+  }
+}
+
+void Channel::removeBan(const QByteArray &mask) {
+  if (!mask.isEmpty()) {
+    m_ban_masks.remove(mask);
+    // TODO: persist or notify members if desired
+  }
+}
+
+QList<QByteArray> Channel::banList() const {
+  return m_ban_masks.values();
+}
+
+void Channel::message(const QSharedPointer<Account> &account, const QByteArray &message) {
+  for (const auto&member: m_members) {
+    if (member->uid == account->uid)
+      continue;
+    // @TODO: check if user is actually online
+    for (const auto& conn: member->connections) {
+      conn->message(account, "#" + m_name, message);
+    }
+  }
+}
+
+void Channel::setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg) {
+  using irc::ChannelModes;
+
+  switch (mode) {
+    // modes without extra arguments
+    case ChannelModes::INVITE_ONLY:
+    case ChannelModes::MODERATED:
+    case ChannelModes::NO_OUTSIDE_MSGS:
+    case ChannelModes::QUIET:
+    case ChannelModes::SECRET:
+    case ChannelModes::TOPIC_PROTECTED: {
+      if (adding) channel_modes.set(mode);
+      else channel_modes.clear(mode);
+      break;
+    }
+
+    // +k (key)
+    case ChannelModes::KEY: {
+      if (adding) {
+        setKey(arg);
+        channel_modes.set(mode);
+      } else {
+        setKey({});
+        channel_modes.clear(mode);
+      }
+      break;
+    }
+
+    // +l (limit)
+    case ChannelModes::LIMIT: {
+      if (adding) {
+        bool ok = false;
+        const int newLimit = arg.toInt(&ok);
+        if (ok && newLimit >= 0) {
+          m_limit = newLimit;
+          channel_modes.set(mode);
+        } else {
+          // invalid argument -> ignore or log
+        }
+      } else {
+        m_limit = 0;
+        channel_modes.clear(mode);
+      }
+      break;
+    }
+
+    // +b (ban masks) - usually stored as a list
+    case ChannelModes::BAN: {
+      if (adding) {
+        if (!arg.isEmpty()) addBan(arg);
+      } else {
+        if (!arg.isEmpty()) removeBan(arg);
+      }
+      break;
+    }
+
+    default:
+      break;
+  } // switch
 }

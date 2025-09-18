@@ -38,7 +38,7 @@ public:
 
   // need to keep track of nicks too, as on IRC they are unique
   // they need to be lowercase
-  QList<QByteArray> irc_nicks;
+  QHash<QByteArray, QSharedPointer<Account>> irc_nicks;
 
   QHash<QByteArray, QSharedPointer<Channel>> channels;
 

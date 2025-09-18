@@ -82,16 +82,15 @@ bool Account::setNick(const QByteArray &nick) {
   const QByteArray nick_old_lower = m_nick.toLower();
 
   if (g::ctx->irc_nicks.contains(nick_lower))
+    // @TODO: better return errors
     return false;
 
-  g::ctx->irc_nicks.removeAll(nick_lower);
-  g::ctx->irc_nicks << nick.toLower();
+  auto self = g::ctx->accounts_lookup_uuid.value(uid);
+
+  g::ctx->irc_nicks.remove(nick_lower);
+  g::ctx->irc_nicks[nick_lower] = self;
 
   m_nick = nick;
-  auto self = g::ctx->accounts_lookup_uuid.value(uid);
-  if (self.isNull()) {
-    int wegiwog = 1;
-  }
 
   // emit nickChanged(nick_old, nick);
 
@@ -148,6 +147,22 @@ void Account::channel_part(QSharedPointer<Account> &acc, const QByteArray& chann
   ptr->part(acc, message);
 }
 
+void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, const QByteArray &message) {
+  // @TODO: deal with history when we are offline
+
+  const auto ptr = get(uid);
+  for (const auto& _conn: dest->connections) {
+    _conn->message(ptr, m_nick, message);
+  }
+
+  // send to ourselves (other connected clients)
+  for (const auto& _conn: connections) {
+    if (conn == _conn)
+      continue;
+    _conn->self_message(m_nick, message);
+  }
+}
+
 void Account::broadcast_nick_changed(const QByteArray& msg) const {
   for (const auto& conn: connections) {
     conn->m_socket->write(msg);
@@ -168,10 +183,10 @@ void Account::add_connection(irc::client_connection *ptr) {
   connections << ptr;
 }
 
-QSharedPointer<Account> Account::get(const QByteArray &account_name) {
+QSharedPointer<Account> Account::get(const QByteArray &uid) {
   // @TODO: slow qlist
   for (const auto& ptr: g::ctx->accounts) {
-    if (ptr->name() == account_name)
+    if (ptr->uid == uid)
       return ptr;
   }
   return nullptr;

@@ -11,7 +11,7 @@
 
 namespace irc {
   client_connection::client_connection(Server *server, QTcpSocket *socket) :
-      QObject(server), m_server(server), m_socket(socket) {
+    QObject(server), m_server(server), m_socket(socket) {
 
     m_account = QSharedPointer<Account>(new Account());
     m_account->setRandomUID();
@@ -25,10 +25,10 @@ namespace irc {
     time_connection_established = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
 
     setup_tasks.set(
-      ConnectionSetupTasks::CAP_EXCHANGE,
-      ConnectionSetupTasks::NICK,
-      ConnectionSetupTasks::USER
-    );
+        ConnectionSetupTasks::CAP_EXCHANGE,
+        ConnectionSetupTasks::NICK,
+        ConnectionSetupTasks::USER
+        );
 
     connect(m_socket, &QTcpSocket::readyRead, this, &client_connection::onReadyRead);
     connect(m_socket, &QTcpSocket::disconnected, this, &client_connection::onSocketDisconnected);
@@ -105,13 +105,17 @@ namespace irc {
         const QByteArray reply = "CAP * ACK :" + ack.join(' ').toUtf8();
         send_raw(reply);
 
-        for (const auto& cap: ack) {
+        for (const auto &cap: ack) {
           if (cap == "multi-prefix") {
             capabilities.set(PROTOCOL_CAPABILITY::MULTI_PREFIX);
           } else if (cap == "extended-join") {
             capabilities.set(PROTOCOL_CAPABILITY::EXTENDED_JOIN);
           } else if (cap == "chghost") {
             capabilities.set(PROTOCOL_CAPABILITY::CHGHOST);
+          } else if (cap == "echo-message") {
+            capabilities.set(PROTOCOL_CAPABILITY::ECHO_MESSAGE);
+          } else if (cap == "znc.in/self-message") {
+            capabilities.set(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE);
           }
         }
       } else {
@@ -119,7 +123,7 @@ namespace irc {
         send_raw(reply);
       }
     } else if (sub_cmd == "LIST") {
-      QStringList enabled =  m_server->capabilities;
+      QStringList enabled = m_server->capabilities;
       if (client_cap_version >= 302) {
         const QByteArray reply = "CAP * LIST :" + enabled.join(' ').toUtf8();
         send_raw(reply);
@@ -141,54 +145,187 @@ namespace irc {
   }
 
   void client_connection::handleMODE(const QList<QByteArray> &args) {
-    if (args.size() <= 1)  // @TODO: channel mode
+    if (args.size() == 0)
       return;
 
+    const QByteArray target = args.at(0);
+
+    // --- MODE <target> (query) ---
+    if (args.size() == 1) {
+      // USER query
+      if (target == nick) {
+        QString present;
+        for (auto it = userModesLookup.constBegin(); it != userModesLookup.constEnd(); ++it) {
+          const irc::UserModes mode = it.key();
+          const QChar letter = it.value().letter;
+          if (user_modes.has(mode))
+            present += letter;
+        }
+        if (!present.isEmpty()) {
+          send_raw("MODE " + nick + " :" + present.toUtf8());
+        } else {
+          send_raw("MODE " + nick + " :"); // empty
+        }
+        return;
+      }
+
+      // CHANNEL query
+      if (target.startsWith('#')) {
+        const auto channel = Channel::get(target.mid(1));
+        if (!channel)
+          return reply_num(403, target + " :No such channel");
+
+        QString present;
+        // collect letters for currently set channel modes
+        for (auto it = channelModesLookup.constBegin(); it != channelModesLookup.constEnd(); ++it) {
+          const irc::ChannelModes mode = it.key();
+          const QChar letter = it.value().letter;
+          if (channel->channel_modes.has(mode))
+            present += letter;
+        }
+
+        // If there are parameters for certain modes, append them after the mode string
+        QByteArray params;
+        if (channel->channel_modes.has(irc::ChannelModes::KEY)) {
+          params += " " + channel->key();
+        }
+        if (channel->channel_modes.has(irc::ChannelModes::LIMIT)) {
+          params += " " + QByteArray::number(channel->limit());
+        }
+
+        if (!present.isEmpty()) {
+          send_raw("324 " + nick + " #" + channel->name() +" :" + ("+" + present).toUtf8() + params);
+        } else {
+          send_raw("324 " + nick + " #" + channel->name() +" :");
+        }
+        return;
+      }
+
+      // otherwise unknown target
+      return reply_num(501, "Unknown MODE flag");
+    }
+
+    // --- MODE <target> <modes...> (change request) ---
     QByteArray requested_modes = args.at(1);
     if (requested_modes.isEmpty() || (requested_modes[0] != '+' && requested_modes[0] != '-'))
       return reply_num(501, "Unknown MODE flag");
 
     const bool adding = requested_modes[0] == '+';
-    QString result; // actual modes that were changed
+    QString result;
 
-    bool invalid = false;
-    Flags<UserModes> _modes = user_modes;
+    // USER MODE change
+    if (target == nick) {
+      bool invalid = false;
+      for (int i = 1; i < requested_modes.size(); ++i) {
+        QChar letter = requested_modes[i];
+        if (!userModesLookupLetter.contains(letter)) {
+          invalid = true;
+          continue;
+        }
+        const auto mode = userModesLookupLetter.value(letter);
+        const bool before = user_modes.has(mode);
+        applyUserMode(mode, adding);
+        const bool after = user_modes.has(mode);
 
-    // start from second character (skip +/-)
-    for (int i = 1; i < requested_modes.size(); ++i) {
-      QChar letter = requested_modes[i];
-
-      if (!userModesLookupLetter.contains(letter)) {
-        invalid = true;
-        continue;
+        if (before != after)
+          result += letter;
       }
 
-      const UserModes mode = userModesLookupLetter.value(letter);
+      if (invalid)
+        return reply_num(501, "Unknown MODE flag");
 
-      if (adding) {
-        if (!_modes.has(mode)) {
-          _modes.set(mode);
-          result += letter;
-        }
+      if (!result.isEmpty()) {
+        const QByteArray modePrefix = adding ? "+" : "-";
+        send_raw("MODE " + nick + " :" + modePrefix + result.toUtf8());
       } else {
-        if (_modes.has(mode)) {
-          _modes.clear(mode);
-          result += letter;
-        }
+        return reply_num(501, "Unknown MODE flag");
       }
-    }
-
-    if (invalid)
-      return reply_num(501, "Unknown MODE flag");
-
-    if (!result.isEmpty()) {
-      user_modes = _modes;
-      const QByteArray modePrefix = adding ? "+" : "-";
-      send_raw("MODE " + nick + " :" + modePrefix + result.toUtf8());
       return;
     }
 
+    // CHANNEL MODE change
+    if (target.startsWith('#')) {
+      const auto channel = Channel::get(target.mid(1));
+      if (!channel)
+        return reply_num(403, target + " :No such channel");
+
+      bool invalid = false;
+      int argIndex = 2; // args after mode string
+
+      for (int i = 1; i < requested_modes.size(); ++i) {
+        QChar letter = requested_modes[i];
+        if (!channelModesLookupLetter.contains(letter)) {
+          invalid = true;
+          continue;
+        }
+        const auto mode = channelModesLookupLetter.value(letter);
+
+        QByteArray modeArg;
+        // these channel modes commonly take arguments
+        if (mode == ChannelModes::BAN ||
+            mode == ChannelModes::KEY ||
+            mode == ChannelModes::LIMIT) {
+          if (argIndex < args.size()) {
+            modeArg = args.at(argIndex++);
+          } else {
+            // missing argument - treat as invalid for that mode
+            // (choose to reply differently; mark invalid)
+            invalid = true;
+            continue;
+          }
+        }
+
+        const bool before = channel->channel_modes.has(mode);
+        channel->setMode(mode, adding, modeArg);
+        const bool after = channel->channel_modes.has(mode);
+
+        if (before != after)
+          result += letter;
+      }
+
+      if (invalid)
+        return reply_num(501, "Unknown MODE flag");
+
+      if (!result.isEmpty()) {
+        const QByteArray modePrefix = adding ? "+" : "-";
+        send_raw("MODE " + target + " :" + modePrefix + result.toUtf8());
+      }
+      return;
+    }
+
+    // default
     return reply_num(501, "Unknown MODE flag");
+  }
+
+  void client_connection::applyUserMode(irc::UserModes mode, bool adding) {
+    using irc::UserModes;
+
+    switch (mode) {
+      case UserModes::INVISIBLE:
+        // e.g. update presence visibility for WHO/WHOIS
+          // TODO: implement presence change
+            break;
+
+      case UserModes::CLOAK:
+        // update host display for this connection
+          break;
+
+      case UserModes::REGISTERED:
+        // if the user just registered/identified, maybe set some flags
+          break;
+
+      case UserModes::IRC_OPERATOR:
+        // grant or revoke server operator privileges
+          break;
+
+      default:
+        // other modes may not require immediate action
+          break;
+    }
+
+    // finally update the bit in user_modes
+    if (adding) user_modes.set(mode);
+    else user_modes.clear(mode);
   }
 
   void client_connection::handlePASS(const QList<QByteArray> &args) {
@@ -244,6 +381,18 @@ namespace irc {
 
   void client_connection::channel_send_topic(const QByteArray &channel_name, const QByteArray &topic) {
 
+  }
+
+  void client_connection::self_message(const QByteArray& target, const QByteArray &message) const {
+    if (capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE)) {
+      const QByteArray msg = ":" + prefix() + " PRIVMSG " + "bla" + " :" + message + "\r\n";
+      m_socket->write(msg);
+    }
+  }
+
+  void client_connection::message(const QSharedPointer<Account> &src, const QByteArray& target, const QByteArray &message) const {
+    const QByteArray msg = ":" + src->prefix(0) + " PRIVMSG " + target + " :" + message + "\r\n";
+    m_socket->write(msg);
   }
 
   void client_connection::channel_join(const QSharedPointer<Channel> &channel, const QSharedPointer<Account> &account, const QByteArray &password) {
@@ -359,7 +508,7 @@ namespace irc {
       message = args.at(1);
     }
 
-    for (auto& _name : chans) {
+    for (auto &_name: chans) {
       if (!_name.startsWith("#"))
         continue;
 
@@ -382,34 +531,26 @@ namespace irc {
       reply_num(461, "PRIVMSG :Not enough parameters");
       return;
     }
-    // QByteArray target = args[0];
-    // QByteArray text = args[1];
-    // if (target.startsWith('#') || target.startsWith('&') || target.startsWith('+') || target.startsWith('!')) {
-    //
-    //   // channel message
-    //   Channel *ch = nullptr;
-    //   for (Channel *c: std::as_const(channels)) {
-    //     if (ircLower(c->name()) == ircLower(target)) {
-    //       ch = c;
-    //       break;
-    //     }
-    //   }
-    //
-    //   if (!ch) {
-    //     sendRaw("401 " + nick + " " + target + " :No such nick/channel");
-    //     return;
-    //   }
-    //
-    //   const QByteArray line = ":" + prefix() + " PRIVMSG " + ch->name() + " :" + text + "\r\n";
-    //
-    //   for (auto &acc: ch->members()) {
-    //     for (const auto &c: acc->connections()) {
-    //       if (c == this) {
-    //         continue;
-    //       }
-    //       c->m_socket->write(line);
-    //     }
-    //   }
+
+    const QByteArray target = args[0];
+    QByteArray text = args[1];
+    if (target.startsWith('#')) {  //  || target.startsWith('&') || target.startsWith('+') || target.startsWith('!')
+      const auto chan_ptr = Channel::get(target.mid(1));
+      if (chan_ptr.isNull()) {
+        send_raw("401 " + nick + " " + target + " :No such nick/channel");
+        return;
+      }
+
+      chan_ptr->message(m_account, text);
+    } else {
+      if (!g::ctx->irc_nicks.contains(target)) {
+        send_raw("401 " + nick + " " + target + " :No such nick/channel");
+        return;
+      }
+
+      m_account->message(this, g::ctx->irc_nicks[target], text);
+    }
+
     //
     // } else {
     //   // user message
@@ -581,6 +722,10 @@ namespace irc {
   void client_connection::send_raw(const QByteArray &line) {
     QByteArray out = ":" + m_server->serverName() + " " + line + "\r\n";
     m_socket->write(out);
+  }
+
+  void client_connection::change_host(const QSharedPointer<Account> &acc, const QByteArray &new_host) {
+
   }
 
   void client_connection::reply_num(const int code, const QByteArray &text) {

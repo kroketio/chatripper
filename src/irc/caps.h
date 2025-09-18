@@ -8,6 +8,8 @@ namespace irc {
     CHGHOST,         // https://ircv3.net/specs/extensions/chghost
     ACCOUNT_TAG,     // https://ircv3.net/specs/extensions/account-tag
     ACCOUNT_NOTIFY,   // https://ircv3.net/specs/extensions/account-notify
+    ECHO_MESSAGE,
+    ZNC_SELF_MESSAGE,
     FISH              //
   };
 }

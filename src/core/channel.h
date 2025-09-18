@@ -22,6 +22,10 @@ public:
   void part(QSharedPointer<Account> &account, const QByteArray &message = "");
   void leave(const QByteArray &account_name);
 
+  void message(const QSharedPointer<Account> &account, const QByteArray &message);
+
+  void setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg = {});
+
   static QSharedPointer<Channel> get(const QByteArray &channel_name);
   static QSharedPointer<Channel> get_or_create(const QByteArray &channel_name);
 
@@ -44,6 +48,11 @@ public:
 
   Flags<irc::ChannelModes> channel_modes;
 
+  void addBan(const QByteArray &mask);
+  void removeBan(const QByteArray &mask);
+  QList<QByteArray> banList() const;
+  int limit() const { return m_limit; }
+
   QByteArray uid;
   QDateTime date_creation;
 
@@ -65,4 +74,8 @@ private:
   QByteArray m_key;
   QByteArray m_account_owner_id;
   QList<QSharedPointer<Account>> m_members;
+
+  // bans
+  QSet<QByteArray> m_ban_masks;
+  int m_limit = 0;
 };

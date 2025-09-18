@@ -69,7 +69,14 @@ namespace irc {
 
     bool change_nick(const QByteArray &new_nick);
     bool change_nick(const QSharedPointer<Account> &acc, const QByteArray &old_nick, const QByteArray &new_nick);
+
+    void self_message(const QByteArray& target, const QByteArray &message) const;
+    void message(const QSharedPointer<Account> &src, const QByteArray& target, const QByteArray &message) const;
+
+    void change_host(const QSharedPointer<Account> &acc, const QByteArray &new_host);
     void change_host(const QByteArray &new_host);
+
+    void applyUserMode(UserModes mode, bool adding);
 
     static QByteArray irc_lower(const QByteArray &s);
     static QList<QByteArray> split_irc(const QByteArray &line);

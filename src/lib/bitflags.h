@@ -31,4 +31,12 @@ struct Flags {
   [[nodiscard]] constexpr bool empty() const {
     return bits == 0;
   }
+
+  // equality
+  constexpr bool operator==(const Flags& other) const {
+    return bits == other.bits;
+  }
+  constexpr bool operator!=(const Flags& other) const {
+    return bits != other.bits;
+  }
 };
