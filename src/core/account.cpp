@@ -21,6 +21,8 @@ void Account::setRandomUID() {
 }
 
 bool Account::verifyPassword(const QByteArray &candidate) const {
+  // if (g::ctx->external_auth_handler)
+
   if (candidate.isEmpty() || password.isEmpty())
     return false;
 

@@ -5,6 +5,7 @@ namespace g {
   QString configRoot;
   QString homeDir;
   QString configDirectory;
+  QString pythonModulesDirectory;
   QString cacheDirectory;
   QByteArray defaultHost;
   QFileInfo pathDatabase;

@@ -20,8 +20,9 @@
 
 #include "irc/client_connection.h"
 #include "irc/server.h"
+#include "python/manager.h"
 
-class Ctx : public QObject {
+class Ctx final : public QObject {
 Q_OBJECT
 
 public:
@@ -57,6 +58,10 @@ private slots:
   void onApplicationLog(const QString &msg);
 
 private:
+  DiamondDogs* diamondDogs = nullptr;
+
   QFileInfo m_path_db;
+
   static void createConfigDirectory(const QStringList &lst);
+  static void createDefaultFiles();
 };

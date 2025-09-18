@@ -35,8 +35,9 @@ public:
   static bool portOpen(const QString &hostname, quint16 port);
   static QString humanFileSize(double num_bytes);
   static QFileInfo tempFile(QString suffix);
+  static bool is_main_thread();
   static std::chrono::time_point<std::chrono::high_resolution_clock> timeStart();
-  static void timeEnd(std::string label, std::chrono::time_point<std::chrono::high_resolution_clock> start);
+  static void timeEnd(const std::string &label, std::chrono::time_point<std::chrono::high_resolution_clock> start);
 
   static unsigned int getCpuCount()
   {

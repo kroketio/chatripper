@@ -1,15 +1,18 @@
 #include <QObject>
 #include <QJsonDocument>
+#include <QThread>
 
 #include "png.h"
 #include "utils.h"
 #include "lib/config.h"
 
 void Utils::init() {
+  // @TODO: sane dirs: data dir, conf dir, scripts dir
   g::configRoot = QDir::homePath();
   g::homeDir = QDir::homePath();
   // g::configDirectory = QString("%1/.config/%2/").arg(g::configRoot, QCoreApplication::applicationName());
   g::configDirectory = "/home/dsc/CLionProjects/chat/server/data/";
+  g::pythonModulesDirectory = g::configDirectory + "scripts/";
   g::cacheDirectory = QString("%1/cache").arg(g::configDirectory);
   g::pathDatabase = QFileInfo(g::configDirectory + "db.sqlite3");
   g::pathDatabasePreload = QFileInfo(g::configDirectory + "preload.json");
@@ -230,7 +233,11 @@ std::chrono::time_point<std::chrono::high_resolution_clock> Utils::timeStart() {
   return std::chrono::high_resolution_clock::now();
 }
 
-void Utils::timeEnd(std::string label, std::chrono::time_point<std::chrono::high_resolution_clock> start) {
+bool Utils::is_main_thread() {
+  return QThread::currentThread() == QCoreApplication::instance()->thread();
+}
+
+void Utils::timeEnd(const std::string &label, const std::chrono::time_point<std::chrono::high_resolution_clock> start) {
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsedSeconds = end - start;
   double delta = elapsedSeconds.count();

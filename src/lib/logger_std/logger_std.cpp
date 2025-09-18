@@ -8,8 +8,6 @@ namespace globals {
     CLOCK_FILE = fopen(filePath, "w");
     if (!CLOCK_FILE) {
       fprintf(stderr, "Failed to open %s for writing\n", filePath);
-    } else {
-      logger_std_end(logger_std_start(), "=================");
     }
   }
 
