@@ -33,11 +33,8 @@ bool Account::verifyPassword(const QByteArray &candidate) const {
 }
 
 QSharedPointer<Account> Account::create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation) {
-  const auto it = g::ctx->accounts_lookup_name.find(username);
-  if (it != g::ctx->accounts_lookup_name.end()) {
-    auto ptr = it.value();
+  if (const auto ptr = get_by_name(username); !ptr.isNull())
     return ptr;
-  }
 
   QSharedPointer<Account> account = QSharedPointer<Account>::create(username);
   account->setUID(id);
@@ -103,6 +100,8 @@ bool Account::setNick(const QByteArray &nick) {
     return false;
 
   const auto self = get_by_uid(m_uid);
+  if (self.isNull())
+    return false;
 
   const QByteArray nick_lower = nick.toLower();
   const QByteArray nick_old = m_nick;
@@ -173,6 +172,9 @@ void Account::message(const irc::client_connection *conn, const QSharedPointer<A
   QReadLocker locker(&mtx_lock);
 
   const auto self = get_by_uid(m_uid);
+  if (self.isNull())
+    return;
+
   for (const auto& _conn: dest->connections)
     _conn->message(self, m_nick, message);
 
@@ -199,8 +201,12 @@ void Account::add_connection(irc::client_connection *ptr) {
 
     // when unregistered, we need to clean the global account roster
     if (!is_logged_in()) {
-      const auto self = get_by_uid(uid());
       g::ctx->irc_nicks_remove_cache(nick());
+
+      const auto self = get_by_uid(uid());
+      if (self.isNull())
+        return;
+
       g::ctx->account_remove_cache(self);
     }
   });

@@ -124,7 +124,7 @@ QSharedPointer<Channel> Channel::get_or_create(const QByteArray &channel_name) {
 QSharedPointer<Account> Channel::accountOwner() const {
   if (m_account_owner_id.isNull())
     return {};
-  return g::ctx->accounts_lookup_uuid.value(m_account_owner_id);
+  return Account::get_by_uid(m_account_owner_id);
 }
 
 void Channel::onNickChanged(const QSharedPointer<Account> &acc, const QByteArray& old_nick, const QByteArray& new_nick, QSet<QSharedPointer<Account>> &broadcasted_accounts) {

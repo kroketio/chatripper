@@ -70,6 +70,11 @@ void Ctx::createConfigDirectory(const QStringList &lst) {
   }
 }
 
+bool Ctx::account_username_exists(const QByteArray &username) const {
+  QReadLocker locker(&mtx_cache);
+  return accounts_lookup_name.contains(username);
+}
+
 void Ctx::account_remove_cache(const QSharedPointer<Account>& ptr) {
   if (ptr.isNull())
     return;

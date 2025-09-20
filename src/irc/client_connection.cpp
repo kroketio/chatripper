@@ -371,8 +371,10 @@ namespace irc {
       return;
     }
 
-    if (g::ctx->accounts_lookup_name.contains(user))
+    QReadLocker locker(&g::ctx->mtx_cache);
+    if (g::ctx->account_username_exists(user))
       user_already_exists = true;
+    locker.unlock();
 
     setup_tasks.clear(ConnectionSetupTasks::USER);
     try_finalize_setup();
@@ -831,9 +833,8 @@ namespace irc {
     const QByteArray username = plain_spl.at(1);
     const QByteArray password = plain_spl.at(2);
 
-    const auto account_exists = g::ctx->accounts_lookup_name.contains(username);
-    if (account_exists) {
-      const auto account = g::ctx->accounts_lookup_name[username];
+    const auto account = Account::get_by_name(username);
+    if (!account.isNull()) {
       if (account->verifyPassword(password)) {
         account->merge(m_account);
         m_account = account;

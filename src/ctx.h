@@ -41,6 +41,7 @@ public:
   QHash<QByteArray, QSharedPointer<Account>> accounts_lookup_uuid;
   void account_insert_cache(const QSharedPointer<Account>& ptr);
   void account_remove_cache(const QSharedPointer<Account>& ptr);
+  bool account_username_exists(const QByteArray& username) const;
   void irc_nicks_remove_cache(const QByteArray& nick) const;
   void irc_nicks_insert_cache(const QByteArray &nick, const QSharedPointer<Account>& ptr) const;
   QSharedPointer<Account> irc_nick_get(const QByteArray &nick) const;
