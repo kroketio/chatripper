@@ -48,8 +48,8 @@ Ctx::Ctx() {
   SQL::account_get_all();  // just to trigger cache insertion
   CLOCK_MEASURE_END(start_init_db_preload, "initial db load");
 
-  // python
-  diamondDogs = new DiamondDogs(this);
+  // Python
+  snakes = new Snakes(this);
 }
 
 void onChannelMemberJoined(const QSharedPointer<Account> &account) {

@@ -6,16 +6,18 @@
 #include <QVariant>
 #include <QMutex>
 
-#include "interpreter.h"  // Snake
+#include "interpreter.h"
 
-class DiamondDogs final : public QObject {
+// Round-robin for the various Python interpreter threads
+
+class Snakes final : public QObject {
   Q_OBJECT
 
 public:
-  explicit DiamondDogs(QObject *parent = nullptr);
-  ~DiamondDogs() override;
+  explicit Snakes(QObject *parent = nullptr);
+  ~Snakes() override;
 
-  // round-robin callFunction wrapper
+  // callFunctionList wrapper
   template<typename... Args>
   QVariant callFunction(const QString &funcName, Args&&... args) {
     const QVariantList argList{QVariant(std::forward<Args>(args))...};
@@ -25,8 +27,8 @@ public:
 private:
   QVariant callFunctionList(const QString &funcName, const QVariantList &args);
 
-  QVector<QThread*> threads_;
-  QVector<Snake*> snakes_;
-  int nextIndex_;
-  QMutex mutex_;
+  QVector<QThread*> m_threads;
+  QVector<Snake*> m_snakes;
+  int next_index;
+  QMutex mtx_snake;
 };

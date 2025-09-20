@@ -1,12 +1,11 @@
 #include "manager.h"
 #include <QCoreApplication>
 #include <QMetaObject>
-#include <QDebug>
 
-DiamondDogs::DiamondDogs(QObject *parent) : QObject(parent), nextIndex_(0) {
+Snakes::Snakes(QObject *parent) : QObject(parent), next_index(0) {
   constexpr int thread_count = 4;
-  threads_.resize(thread_count);
-  snakes_.resize(thread_count);
+  m_threads.resize(thread_count);
+  m_snakes.resize(thread_count);
 
   for (int i = 0; i < thread_count; ++i) {
     const auto thread = new QThread(this);
@@ -18,22 +17,22 @@ DiamondDogs::DiamondDogs(QObject *parent) : QObject(parent), nextIndex_(0) {
     connect(thread, &QThread::finished, snake, &QObject::deleteLater);
     connect(thread, &QThread::finished, thread, &QObject::deleteLater);
 
-    threads_[i] = thread;
-    snakes_[i] = snake;
+    m_threads[i] = thread;
+    m_snakes[i] = snake;
 
     thread->start();
   }
 }
 
-QVariant DiamondDogs::callFunctionList(const QString &funcName, const QVariantList &args) {
-  QMutexLocker locker(&mutex_);
+QVariant Snakes::callFunctionList(const QString &funcName, const QVariantList &args) {
+  QMutexLocker locker(&mtx_snake);
 
-  if (snakes_.isEmpty())
+  if (m_snakes.isEmpty())
     return {};
 
-  const int idx = nextIndex_;
-  nextIndex_ = (nextIndex_ + 1) % snakes_.size();
-  Snake* target = snakes_[idx];
+  const int idx = next_index;
+  next_index = (next_index + 1) % m_snakes.size();
+  Snake* target = m_snakes[idx];
 
   QVariant returnValue;
   QMetaObject::invokeMethod(
@@ -49,8 +48,8 @@ QVariant DiamondDogs::callFunctionList(const QString &funcName, const QVariantLi
 }
 
 // snake? snaakeeeeee
-DiamondDogs::~DiamondDogs() {
-  for (QThread* t : threads_) {
+Snakes::~Snakes() {
+  for (QThread* t : m_threads) {
     if (t->isRunning()) {
       t->quit();
       t->wait();

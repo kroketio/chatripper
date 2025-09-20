@@ -69,7 +69,7 @@ private slots:
   void onApplicationLog(const QString &msg);
 
 private:
-  DiamondDogs* diamondDogs = nullptr;
+  Snakes* snakes = nullptr;
 
   QFileInfo m_path_db;
 
