@@ -1,5 +1,4 @@
 #include "core/channel.h"
-#include "irc/client_connection.h"
 
 #include "ctx.h"
 #include "lib/globals.h"
@@ -173,13 +172,20 @@ QList<QByteArray> Channel::banList() const {
   return m_ban_masks.values();
 }
 
-void Channel::message(const QSharedPointer<Account> &account, const QByteArray &message) {
+void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, const QByteArray &message) {
+  // @TODO: check if user is actually online
+
   for (const auto&member: m_members) {
-    if (member->uid() == account->uid())
-      continue;
-    // @TODO: check if user is actually online
-    for (const auto& conn: member->connections) {
-      conn->message(account, "#" + m_name, message);
+    if (member != from) {
+      for (const auto& _conn: member->connections)
+        _conn->message(from, "#" + m_name, message);
+    } else {  // ourselves
+      for (const auto& _conn: from->connections) {
+        if (_conn != from_conn)
+          _conn->self_message("#" + m_name, message);  // ZNC_SELF_MESSAGE
+        else
+          continue;  // @TODO: echo-message
+      }
     }
   }
 }

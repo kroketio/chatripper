@@ -5,6 +5,7 @@
 #include <QPointer>
 
 #include "core/account.h"
+#include "irc/client_connection.h"
 #include "irc/modes.h"
 
 class Account;
@@ -22,7 +23,7 @@ public:
   void part(QSharedPointer<Account> &account, const QByteArray &message = "");
   void leave(const QByteArray &account_name);
 
-  void message(const QSharedPointer<Account> &account, const QByteArray &message);
+  void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, const QByteArray &message);
 
   void setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg = {});
 

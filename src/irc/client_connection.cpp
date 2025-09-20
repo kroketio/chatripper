@@ -540,7 +540,7 @@ namespace irc {
         return;
       }
 
-      chan_ptr->message(m_account, text);
+      chan_ptr->message(this, m_account, text);
     } else {
       if (!g::ctx->irc_nicks.contains(target)) {
         send_raw("401 " + nick + " " + target + " :No such nick/channel");

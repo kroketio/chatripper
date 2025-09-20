@@ -9,8 +9,6 @@
 #include <QHash>
 
 #include "lib/bitflags.h"
-#include "core/channel.h"
-#include "core/account.h"
 #include "irc/caps.h"
 #include "irc/modes.h"
 

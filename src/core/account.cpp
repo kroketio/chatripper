@@ -172,15 +172,15 @@ void Account::message(const irc::client_connection *conn, const QSharedPointer<A
   // @TODO: deal with history when we are offline
   QReadLocker locker(&mtx_lock);
 
-  const auto ptr = get_by_uid(m_uid);
+  const auto self = get_by_uid(m_uid);
   for (const auto& _conn: dest->connections)
-    _conn->message(ptr, m_nick, message);
+    _conn->message(self, m_nick, message);
 
   // send to ourselves (other connected clients)
   for (const auto& _conn: connections) {
-    if (conn == _conn)
+    if (conn == _conn || self == dest)
       continue;
-    _conn->self_message(m_nick, message);
+    _conn->self_message(dest->nick(), message);
   }
 }
 
@@ -195,13 +195,13 @@ void Account::add_connection(irc::client_connection *ptr) {
   connect(ptr, &irc::client_connection::disconnected, [=] {
     QWriteLocker locker(&mtx_lock);
     connections.removeAll(ptr);
+    locker.unlock();
 
     // when unregistered, we need to clean the global account roster
     if (!is_logged_in()) {
-      g::ctx->irc_nicks_remove_cache(m_nick);
-
-      if (const auto __ptr = g::ctx->accounts_lookup_uuid.value(m_uid); !__ptr.isNull())
-        g::ctx->account_remove_cache(__ptr);
+      const auto self = get_by_uid(uid());
+      g::ctx->irc_nicks_remove_cache(nick());
+      g::ctx->account_remove_cache(self);
     }
   });
 

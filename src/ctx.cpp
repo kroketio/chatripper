@@ -71,6 +71,9 @@ void Ctx::createConfigDirectory(const QStringList &lst) {
 }
 
 void Ctx::account_remove_cache(const QSharedPointer<Account>& ptr) {
+  if (ptr.isNull())
+    return;
+
   QWriteLocker locker(&mtx_cache);
   accounts.remove(ptr);
   accounts_lookup_uuid.remove(ptr->uid());
