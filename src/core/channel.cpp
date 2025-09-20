@@ -45,7 +45,7 @@ void Channel::part(QSharedPointer<Account> &account, const QByteArray &message) 
 
   // notify channel participants
   for (const auto& member: m_members) {
-    if (member->uid == account->uid) continue;
+    if (member->uid() == account->uid()) continue;
 
     for (const auto& conn: member->connections) {
       if (conn->channel_members[chan_ptr].contains(account)) {
@@ -72,7 +72,7 @@ void Channel::join(QSharedPointer<Account> &account) {
 
   // notify channel participants
   for (const auto& member: m_members) {
-    if (member->uid == account->uid) continue;
+    if (member->uid() == account->uid()) continue;
 
     for (const auto& conn: member->connections) {
       if (!conn->channel_members[chan_ptr].contains(account)) {
@@ -175,7 +175,7 @@ QList<QByteArray> Channel::banList() const {
 
 void Channel::message(const QSharedPointer<Account> &account, const QByteArray &message) {
   for (const auto&member: m_members) {
-    if (member->uid == account->uid)
+    if (member->uid() == account->uid())
       continue;
     // @TODO: check if user is actually online
     for (const auto& conn: member->connections) {

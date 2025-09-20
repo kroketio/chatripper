@@ -16,8 +16,7 @@ namespace irc {
     m_account = QSharedPointer<Account>(new Account());
     m_account->setRandomUID();
     m_account->add_connection(this);
-    g::ctx->accounts << m_account;
-    g::ctx->accounts_lookup_uuid[m_account->uid] = m_account;
+    g::ctx->account_insert_cache(m_account);
 
     m_available_modes_count = static_cast<unsigned int>(UserModes::COUNT);
     // m_host = socket->peerAddress().toString().toUtf8();

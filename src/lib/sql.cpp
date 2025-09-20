@@ -587,7 +587,7 @@ bool SQL::preload_from_file(const QString &path) {
 
     QByteArray ownerId;
     if (accountsByName.contains(ownerName)) {
-      ownerId = accountsByName[ownerName]->uid;
+      ownerId = accountsByName[ownerName]->uid();
     }
 
     auto channel = channel_get_or_create(cname, topic, ownerId);
@@ -601,7 +601,7 @@ bool SQL::preload_from_file(const QString &path) {
     for (const QJsonValue &mval: members) {
       QString mname = mval.toString();
       if (accountsByName.contains(mname)) {
-        SQL::channel_add_member(accountsByName[mname]->uid, channel->uid);
+        SQL::channel_add_member(accountsByName[mname]->uid(), channel->uid);
       } else {
         qWarning() << "Skipping unknown member" << mname << "for channel" << cname;
       }

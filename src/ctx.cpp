@@ -70,12 +70,79 @@ void Ctx::createConfigDirectory(const QStringList &lst) {
   }
 }
 
+void Ctx::account_remove_cache(const QSharedPointer<Account>& ptr) {
+  QWriteLocker locker(&mtx_cache);
+  accounts.remove(ptr);
+  accounts_lookup_uuid.remove(ptr->uid());
+
+  const auto name = ptr->name();
+  if (!name.isEmpty())
+    accounts_lookup_name.remove(ptr->name());
+}
+
+void Ctx::irc_nicks_remove_cache(const QByteArray &nick) const {
+  QWriteLocker locker(&mtx_cache);
+  g::ctx->irc_nicks.remove(nick);
+}
+
+void Ctx::irc_nicks_insert_cache(const QByteArray &nick, const QSharedPointer<Account>& ptr) const {
+  QWriteLocker locker(&mtx_cache);
+  g::ctx->irc_nicks[nick] = ptr;
+}
+
+QSharedPointer<Account> Ctx::irc_nick_get(const QByteArray &nick) const {
+  QReadLocker locker(&mtx_cache);
+  if(g::ctx->irc_nicks.contains(nick))
+    return g::ctx->irc_nicks[nick];
+  return {};
+}
+
+void Ctx::account_insert_cache(const QSharedPointer<Account>& ptr) {
+  QWriteLocker locker(&mtx_cache);
+  accounts << ptr;
+  accounts_lookup_uuid[ptr->uid()] = ptr;
+
+  const auto name = ptr->name();
+  if (!name.isEmpty())
+    accounts_lookup_name[ptr->name()] = ptr;
+}
+
+QList<QVariantMap> Ctx::getAccountsByUUIDs(const QList<QByteArray> &uuids) const {
+  QList<QVariantMap> result;
+  QReadLocker locker(&mtx_cache);
+  for (const auto &uuid : uuids) {
+    if (accounts_lookup_uuid.contains(uuid)) {
+      const QSharedPointer<Account> acc = accounts_lookup_uuid[uuid];
+      QVariantMap map;
+      map["uuid"] = QString(acc->uid());
+      map["name"] = QString(acc->name());
+      result.append(map);
+    }
+  }
+  return result;
+}
+
+QList<QVariantMap> Ctx::getChannelsByUUIDs(const QList<QByteArray> &uuids) const {
+  QList<QVariantMap> result;
+  QReadLocker locker(&mtx_cache);
+  for (const auto &uuid : uuids) {
+    if (channels.contains(uuid)) {
+      const QSharedPointer<Channel> ch = channels[uuid];
+      QVariantMap map;
+      map["uuid"] = QString(ch->uid);
+      map["name"] = QString(ch->name());
+      result.append(map);
+    }
+  }
+  return result;
+}
+
 void Ctx::createDefaultFiles() {
   // Python
   auto dest_python = g::pythonModulesDirectory;
   auto files_python = {
     ":/qircd.py"
-};
+  };
 
   for (const auto &fp : files_python) {
     if (!QFile::exists(fp)) {

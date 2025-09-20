@@ -13,58 +13,80 @@ Account::Account(const QByteArray& account_name, QObject* parent) : m_name(accou
 }
 
 void Account::setRandomUID() {
-  if (!uid.isEmpty())
+  QWriteLocker locker(&mtx_lock);
+  if (!m_uid.isEmpty())
     throw std::runtime_error("Random UID should be empty");
 
   const QUuid uuid = QUuid::createUuid();
-  uid = uuid.toRfc4122();
+  m_uid = uuid.toRfc4122();
 }
 
 bool Account::verifyPassword(const QByteArray &candidate) const {
-  // if (g::ctx->external_auth_handler)
+  QReadLocker locker(&mtx_lock);
 
-  if (candidate.isEmpty() || password.isEmpty())
+  if (candidate.isEmpty() || m_password.isEmpty())
     return false;
 
   const std::string candidateStr = candidate.toStdString();
-  const std::string pw = password.toStdString();
+  const std::string pw = m_password.toStdString();
   return bcrypt::validatePassword(candidateStr, pw);
 }
 
 QSharedPointer<Account> Account::create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation) {
-  auto const ctx = Ctx::instance();
-  const auto it = ctx->accounts_lookup_name.find(username);
-  if (it != ctx->accounts_lookup_name.end()) {
+  const auto it = g::ctx->accounts_lookup_name.find(username);
+  if (it != g::ctx->accounts_lookup_name.end()) {
     auto ptr = it.value();
     return ptr;
   }
 
   QSharedPointer<Account> account = QSharedPointer<Account>::create(username);
-  account->uid = id;
+  account->setUID(id);
   account->setName(username);
-  account->password = password;
+  account->setPassword(password);
   account->creation_date = creation;
 
-  ctx->accounts << account;
-  ctx->accounts_lookup_name[account->name()] = account;
-  ctx->accounts_lookup_uuid[account->uid] = account;
+  g::ctx->account_insert_cache(account);
 
   return account;
 }
 
 QByteArray Account::name() {
+  QReadLocker locker(&mtx_lock);
   return m_name;
 }
 
 void Account::setHost(const QByteArray &host) {
+  QWriteLocker locker(&mtx_lock);
   m_host = host;
 }
 
 void Account::setName(const QByteArray &name) {
+  QWriteLocker locker(&mtx_lock);
   m_name = name;
 }
 
+QByteArray Account::uid() {
+  QReadLocker locker(&mtx_lock);
+  return m_uid;
+}
+
+void Account::setUID(const QByteArray &uid) {
+  QWriteLocker locker(&mtx_lock);
+  m_uid = uid;
+}
+
+QByteArray Account::password() {
+  QReadLocker locker(&mtx_lock);
+  return m_password;
+}
+
+void Account::setPassword(const QByteArray &password) {
+  QWriteLocker locker(&mtx_lock);
+  m_password = password;
+}
+
 QByteArray Account::nick() {
+  QReadLocker locker(&mtx_lock);
   if (!m_nick.isEmpty())
     return m_nick;
 
@@ -76,25 +98,27 @@ QByteArray Account::nick() {
 }
 
 bool Account::setNick(const QByteArray &nick) {
+  QWriteLocker locker(&mtx_lock);
   if (nick.isEmpty())
     return false;
 
-  const auto self = g::ctx->accounts_lookup_uuid.value(uid);
+  const auto self = get_by_uid(m_uid);
 
   const QByteArray nick_lower = nick.toLower();
   const QByteArray nick_old = m_nick;
   const QByteArray nick_old_lower = m_nick.toLower();
 
-  if (g::ctx->irc_nicks.contains(nick_lower) && g::ctx->irc_nicks.value(nick_lower) != self)
+  const auto irc_nick_ptr = g::ctx->irc_nick_get(nick_lower);
+  if (!irc_nick_ptr.isNull() && g::ctx->irc_nicks.value(nick_lower) != self)
     // @TODO: better return errors
     return false;
 
+  QWriteLocker mtx_irc_nick(&g::ctx->mtx_cache);
   g::ctx->irc_nicks.remove(nick_old);
   g::ctx->irc_nicks[nick_lower] = self;
+  mtx_irc_nick.unlock();
 
   m_nick = nick;
-
-  // emit nickChanged(nick_old, nick);
 
   // gather accounts that need to be notified
   QSet<QSharedPointer<Account>> l;
@@ -115,15 +139,12 @@ bool Account::setNick(const QByteArray &nick) {
 
   // send nick change notify to the relevant, other accounts
   for (const auto& acc: l) {
-    if (acc->uid == uid) {
-      // skip
-    } else {
+    if (acc != self) {
       for (const auto&conn : acc->connections) {
         conn->change_nick(self, nick_old, nick);
       }
     }
   }
-  //
 
   for (const auto& conn: connections) {
     conn->change_nick(m_nick);
@@ -149,8 +170,9 @@ void Account::channel_part(QSharedPointer<Account> &acc, const QByteArray& chann
 
 void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, const QByteArray &message) {
   // @TODO: deal with history when we are offline
+  QReadLocker locker(&mtx_lock);
 
-  const auto ptr = get_by_uid(uid);
+  const auto ptr = get_by_uid(m_uid);
   for (const auto& _conn: dest->connections)
     _conn->message(ptr, m_nick, message);
 
@@ -163,6 +185,7 @@ void Account::message(const irc::client_connection *conn, const QSharedPointer<A
 }
 
 void Account::broadcast_nick_changed(const QByteArray& msg) const {
+  QReadLocker locker(&mtx_lock);
   for (const auto& conn: connections) {
     conn->m_socket->write(msg);
   }
@@ -170,20 +193,20 @@ void Account::broadcast_nick_changed(const QByteArray& msg) const {
 
 void Account::add_connection(irc::client_connection *ptr) {
   connect(ptr, &irc::client_connection::disconnected, [=] {
+    QWriteLocker locker(&mtx_lock);
     connections.removeAll(ptr);
 
     // when unregistered, we need to clean the global account roster
     if (!is_logged_in()) {
-      g::ctx->irc_nicks.remove(m_nick);
+      g::ctx->irc_nicks_remove_cache(m_nick);
 
-      if (const auto __ptr = g::ctx->accounts_lookup_uuid.value(uid); !__ptr.isNull()) {
-        g::ctx->accounts.remove(__ptr);
-        g::ctx->accounts_lookup_uuid.remove(uid);
-      }
+      if (const auto __ptr = g::ctx->accounts_lookup_uuid.value(m_uid); !__ptr.isNull())
+        g::ctx->account_remove_cache(__ptr);
     }
   });
 
   connect(ptr, &QObject::destroyed, this, [this, ptr] {
+    QWriteLocker locker(&mtx_lock);
     connections.removeAll(ptr);
   });
 
@@ -191,28 +214,18 @@ void Account::add_connection(irc::client_connection *ptr) {
 }
 
 QSharedPointer<Account> Account::get_by_uid(const QByteArray &uid) {
+  QReadLocker locker(&g::ctx->mtx_cache);
   return g::ctx->accounts_lookup_uuid.value(uid);
 }
 
 QSharedPointer<Account> Account::get_by_name(const QByteArray &name) {
+  QReadLocker locker(&g::ctx->mtx_cache);
   return g::ctx->accounts_lookup_name.value(name);
-}
-
-QSharedPointer<Account> Account::get_or_create(const QByteArray &account_name) {
-  // @TODO: slow qlist
-  for (const auto& ptr: g::ctx->accounts) {
-    if (ptr->name() == account_name)
-      return ptr;
-  }
-
-  const auto account = new Account(account_name);
-  auto ptr = QSharedPointer<Account>(account);
-  g::ctx->accounts << ptr;
-  return ptr;
 }
 
 // account merging; we consume account `from` and adopt its connections
 void Account::merge(const QSharedPointer<Account> &from) {
+  QWriteLocker locker(&mtx_lock);
   if (from->is_logged_in()) {
     qCritical() << "cannot merge 2 logged in accounts";
     return;
@@ -221,8 +234,7 @@ void Account::merge(const QSharedPointer<Account> &from) {
   for (const auto& conn: from->connections)
     add_connection(conn);
 
-  g::ctx->accounts_lookup_uuid.remove(from->uid);
-  g::ctx->accounts.remove(from);
+  g::ctx->account_remove_cache(from);
 
   // @TODO: maybe update the db, update message authors.. but probably not
 }

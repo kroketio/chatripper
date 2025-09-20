@@ -6,6 +6,7 @@
 #include <QSet>
 #include <QPointer>
 #include <QElapsedTimer>
+#include <QReadWriteLock>
 #include <QDateTime>
 #include <QHash>
 
@@ -25,7 +26,7 @@ public:
 
   static QSharedPointer<Account> get_by_uid(const QByteArray &uid);
   static QSharedPointer<Account> get_by_name(const QByteArray &name);
-  static QSharedPointer<Account> get_or_create(const QByteArray &account_name);
+  // static QSharedPointer<Account> get_or_create(const QByteArray &account_name);
 
   void merge(const QSharedPointer<Account> &from);
 
@@ -35,6 +36,12 @@ public:
 
   QByteArray name();
   void setName(const QByteArray &name);
+
+  QByteArray uid();
+  void setUID(const QByteArray &uid);
+
+  QByteArray password();
+  void setPassword(const QByteArray &password);
 
   QByteArray nick();
   bool setNick(const QByteArray &nick);
@@ -66,11 +73,6 @@ public:
   void add_connection(irc::client_connection *ptr);
   ~Account() override;
 
-  QByteArray uid;
-  QByteArray m_name;
-  QByteArray m_nick;
-  QByteArray password;
-  QByteArray m_host;
   QDateTime creation_date;
 
   QList<irc::client_connection*> connections;
@@ -78,4 +80,13 @@ public:
 
 signals:
   void nickChanged(const QByteArray& old_nick, const QByteArray& new_nick);
+
+private:
+  mutable QReadWriteLock mtx_lock;
+
+  QByteArray m_uid;
+  QByteArray m_name;
+  QByteArray m_nick;
+  QByteArray m_password;
+  QByteArray m_host;
 };

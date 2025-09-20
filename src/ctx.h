@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QDebug>
 #include <QQueue>
+#include <QReadWriteLock>
 #include <QThread>
 #include <QMutex>
 #include <QDir>
@@ -33,14 +34,20 @@ public:
 
   irc::Server *irc_server;
 
+  mutable QReadWriteLock mtx_cache;
+
   QSet<QSharedPointer<Account>> accounts;
   QHash<QByteArray, QSharedPointer<Account>> accounts_lookup_name;
   QHash<QByteArray, QSharedPointer<Account>> accounts_lookup_uuid;
+  void account_insert_cache(const QSharedPointer<Account>& ptr);
+  void account_remove_cache(const QSharedPointer<Account>& ptr);
+  void irc_nicks_remove_cache(const QByteArray& nick) const;
+  void irc_nicks_insert_cache(const QByteArray &nick, const QSharedPointer<Account>& ptr) const;
+  QSharedPointer<Account> irc_nick_get(const QByteArray &nick) const;
 
   // need to keep track of nicks too, as on IRC they are unique
   // they need to be lowercase
   QHash<QByteArray, QSharedPointer<Account>> irc_nicks;
-
   QHash<QByteArray, QSharedPointer<Channel>> channels;
 
   void startIRC(int port, const QByteArray& password);
@@ -48,6 +55,9 @@ public:
   static Ctx* instance() {
     return g::ctx;
   }
+
+  QList<QVariantMap> getAccountsByUUIDs(const QList<QByteArray> &uuids) const;
+  QList<QVariantMap> getChannelsByUUIDs(const QList<QByteArray> &uuids) const;
 
 signals:
   void applicationLog(const QString &msg);
