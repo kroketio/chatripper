@@ -8,10 +8,30 @@
 #include <QCoreApplication>
 #include <QFile>
 
+#include "ctx.h"
 #include "lib/utils.h"
+#include "lib/logger_std/logger_std.h"
+#include "python/utils.h"
 
 struct ThreadInterp {
-    PyThreadState* tstate;
+  PyThreadState* tstate;
+};
+
+static PyObject* py_get_channels(PyObject* self, PyObject* args);
+static PyObject* py_get_accounts(PyObject* self, PyObject* args);
+
+static PyMethodDef SnakeMethods[] = {
+  {"get_accounts", py_get_accounts, METH_VARARGS, "Get accounts by UUIDs"},
+  {"get_channels", py_get_channels, METH_VARARGS, "Get channels by UUIDs"},
+  {nullptr, nullptr, 0, nullptr} // sentinel
+};
+
+static struct PyModuleDef SnakeModule = {
+  PyModuleDef_HEAD_INIT,
+  "snake", // module name
+  "Snake C++ module",
+  -1,
+  SnakeMethods
 };
 
 Snake::Snake(QObject *parent) : QObject(parent), interp_(nullptr) {}
@@ -45,6 +65,15 @@ void Snake::start() {
 
   // make the sub-interpreter current
   PyThreadState_Swap(interp_->tstate);
+
+  PyObject* pyModule = PyModule_Create(&SnakeModule);
+  if (!pyModule) {
+    qWarning() << "Failed to create snake module";
+  } else {
+    PyObject* mainModule = PyImport_AddModule("__main__");
+    PyObject* mainDict = PyModule_GetDict(mainModule);
+    PyDict_SetItemString(mainDict, "snake", pyModule);
+  }
 
 #ifdef DEBUG
   const QString modulePath = "/home/dsc/CLionProjects/chat/server/python/modules";
@@ -114,83 +143,6 @@ Snake::~Snake() {
   }
 }
 
-// QVariant -> PyObject* (recursive)
-PyObject* QVariantToPyObject(const QVariant &var) {
-  switch (var.typeId()) {
-    case QMetaType::Int:
-      return PyLong_FromLong(var.toInt());
-
-    case QMetaType::Double:
-      return PyFloat_FromDouble(var.toDouble());
-
-    case QMetaType::Bool:
-      return PyBool_FromLong(var.toBool());
-
-    case QMetaType::QString:
-      return PyUnicode_FromString(var.toString().toUtf8().constData());
-
-    case QMetaType::QVariantList: {
-      const QVariantList list = var.toList();
-      PyObject* pyList = PyList_New(list.size());
-      for (int i = 0; i < list.size(); ++i) {
-        PyObject* item = QVariantToPyObject(list[i]);
-        PyList_SetItem(pyList, i, item);  // steals ref
-      }
-      return pyList;
-    }
-
-    case QMetaType::QVariantMap: {
-      const QVariantMap map = var.toMap();
-      PyObject* pyDict = PyDict_New();
-      for (auto it = map.begin(); it != map.end(); ++it) {
-        PyObject* key = PyUnicode_FromString(it.key().toUtf8().constData());
-        PyObject* value = QVariantToPyObject(it.value());
-        PyDict_SetItem(pyDict, key, value);
-        Py_DECREF(key);
-        Py_DECREF(value);
-      }
-      return pyDict;
-    }
-
-    default:
-      Py_RETURN_NONE;
-  }
-}
-
-// PyObject* -> QVariant (recursive)
-QVariant PyObjectToQVariant(PyObject *obj) {
-  if (PyLong_Check(obj)) {
-    return static_cast<int>(PyLong_AsLong(obj));
-  } else if (PyFloat_Check(obj)) {
-    return PyFloat_AsDouble(obj);
-  } else if (PyUnicode_Check(obj)) {
-    return QString::fromUtf8(PyUnicode_AsUTF8(obj));
-  } else if (PyBool_Check(obj)) {
-    return obj == Py_True;
-  } else if (PyList_Check(obj)) {
-    QVariantList list;
-    Py_ssize_t size = PyList_Size(obj);
-    for (Py_ssize_t i = 0; i < size; ++i) {
-      PyObject *item = PyList_GetItem(obj, i); // borrowed ref
-      list.append(PyObjectToQVariant(item));
-    }
-    return list;
-  } else if (PyDict_Check(obj)) {
-    QVariantMap map;
-    PyObject *key, *value;
-    Py_ssize_t pos = 0;
-    while (PyDict_Next(obj, &pos, &key, &value)) {
-      QString qkey = QString::fromUtf8(PyUnicode_AsUTF8(key));
-      map[qkey] = PyObjectToQVariant(value);
-    }
-    return map;
-  } else if (obj == Py_None) {
-    return {};
-  } else {
-    return QString("<unsupported type>");
-  }
-}
-
 QVariant Snake::executeFunction(const QString &funcName, const QVariantList &args) const {
   QVariant result;
   if (!interp_) {
@@ -227,4 +179,70 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
 
   interp_->tstate = PyEval_SaveThread();
   return result;
+}
+
+static PyObject* py_get_accounts(PyObject* self, PyObject* args) {
+  CLOCK_MEASURE_START(wow);
+    PyObject* pyList;
+    if (!PyArg_ParseTuple(args, "O!", &PyList_Type, &pyList)) {
+        return nullptr;
+    }
+
+    QList<QByteArray> uuids;
+    Py_ssize_t len = PyList_Size(pyList);
+    for (Py_ssize_t i = 0; i < len; ++i) {
+        PyObject* item = PyList_GetItem(pyList, i);
+        if (!PyUnicode_Check(item)) {
+            PyErr_SetString(PyExc_TypeError, "UUIDs must be strings");
+            return nullptr;
+        }
+        uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
+    }
+
+    QList<QVariantMap> accounts = Ctx::instance()->getAccountsByUUIDs(uuids);
+    PyObject* pyResult = PyList_New(accounts.size());
+    for (int i = 0; i < accounts.size(); ++i) {
+        const QVariantMap &map = accounts[i];
+        PyObject* pyDict = PyDict_New();
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+            PyDict_SetItemString(pyDict, it.key().toUtf8().constData(),
+                                 PyUnicode_FromString(it.value().toString().toUtf8().constData()));
+        }
+        PyList_SetItem(pyResult, i, pyDict);  // steals reference
+    }
+
+    CLOCK_MEASURE_END(wow, "wowowowow");
+    return pyResult;
+}
+
+static PyObject* py_get_channels(PyObject* self, PyObject* args) {
+    PyObject* pyList;
+    if (!PyArg_ParseTuple(args, "O!", &PyList_Type, &pyList)) {
+        return nullptr;
+    }
+
+    QList<QByteArray> uuids;
+    Py_ssize_t len = PyList_Size(pyList);
+    for (Py_ssize_t i = 0; i < len; ++i) {
+        PyObject* item = PyList_GetItem(pyList, i);
+        if (!PyUnicode_Check(item)) {
+            PyErr_SetString(PyExc_TypeError, "UUIDs must be strings");
+            return nullptr;
+        }
+        uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
+    }
+
+    QList<QVariantMap> channels = Ctx::instance()->getChannelsByUUIDs(uuids);
+    PyObject* pyResult = PyList_New(channels.size());
+    for (int i = 0; i < channels.size(); ++i) {
+        const QVariantMap &map = channels[i];
+        PyObject* pyDict = PyDict_New();
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+            PyDict_SetItemString(pyDict, it.key().toUtf8().constData(),
+                                 PyUnicode_FromString(it.value().toString().toUtf8().constData()));
+        }
+        PyList_SetItem(pyResult, i, pyDict);
+    }
+
+    return pyResult;
 }

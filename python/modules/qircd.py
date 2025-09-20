@@ -2,8 +2,9 @@ import sys, re
 from dataclasses import dataclass, field
 from enum import Enum
 from functools import wraps
+from datetime import datetime
 from uuid import UUID, uuid4
-from typing import Callable
+from typing import Dict, List, Optional, Callable, Set
 
 class IRCEvent(Enum):
     AUTH_USER = 0
@@ -11,6 +12,98 @@ class IRCEvent(Enum):
     PRIVATE_MSG = 2
     JOIN = 3
     LEAVE = 4
+
+@dataclass
+class Account:
+    username: str
+    nick: str
+    password: Optional[str] = None
+    host: Optional[str] = None
+
+    id: str = field(default_factory=lambda: str(uuid4()))
+    creation_date: datetime = field(default_factory=datetime.utcnow)
+
+    def prefix(self) -> str:
+        """nick!username@host."""
+        user = self.username or ""
+        host = self.host or "localhost"
+        return f"{self.nick}!{user}@{host}"
+
+@dataclass
+class Message:
+    id: str = field(default_factory=lambda: str(uuid4()))
+
+    # IRCv3 message tags (key/value strings, e.g. `time`, `msgid`, `account`, `+draft/reply`)
+    tags: Dict[str, Optional[str]] = field(default_factory=dict)
+
+    # prefix information (usually the sender)
+    nick: Optional[str] = None
+    user: Optional[str] = None
+    host: Optional[str] = None
+
+    # target(s) of the PRIVMSG (channels or nicks)
+    targets: List[str] = field(default_factory=list)
+
+    account: Optional[Account] = None
+
+    text: str = ""
+    raw: Optional[str] = None
+
+    # message originates from server (NOTICE, CTCP replies, etc.)
+    from_server: bool = False
+
+@dataclass
+class Channel:
+    """Represents an IRC channel with topic, members, and modes."""
+    uid: str = field(default_factory=lambda: str(uuid4()))
+    name: str = ""
+    topic: str = ""
+    key: Optional[str] = None
+    account_owner_id: Optional[str] = None
+    creation_date: datetime = field(default_factory=datetime.utcnow)
+
+    # membership (references to Account objects)
+    members: List["Account"] = field(default_factory=list)
+
+    # channel modes (like +m, +k, +l etc.)
+    modes: Dict[str, Optional[str]] = field(default_factory=dict)
+
+    # ban masks
+    bans: Set[str] = field(default_factory=set)
+
+    # limit (like +l)
+    limit: Optional[int] = None
+
+    # def has_member(self, account: "Account") -> bool:
+    #     return any(m.uid == account.uid for m in self.members)
+    #
+    # def join(self, account: "Account") -> bool:
+    #     """Add a member if not banned and not already in channel."""
+    #     if account.uid in self.bans:
+    #         return False
+    #     if not self.has_member(account):
+    #         self.members.append(account)
+    #     return True
+    #
+    # def part(self, account: "Account", message: str = "") -> None:
+    #     """Remove member from the channel."""
+    #     self.members = [m for m in self.members if m.uid != account.uid]
+    #
+    # def set_topic(self, topic: str) -> None:
+    #     self.topic = topic
+    #
+    # def set_mode(self, mode: str, adding: bool, arg: Optional[str] = None) -> None:
+    #     """Add or remove a channel mode."""
+    #     if adding:
+    #         self.modes[mode] = arg
+    #     else:
+    #         self.modes.pop(mode, None)
+    #
+    # def add_ban(self, mask: str) -> None:
+    #     self.bans.add(mask)
+    #
+    # def remove_ban(self, mask: str) -> None:
+    #     self.bans.discard(mask)
 
 @dataclass
 class AuthUserResult:
@@ -28,19 +121,20 @@ class QIRC:
     _handlers = {}
 
     def call(self, event: IRCEvent, *args, **kwargs):
-        print(event, type(event))
-        if event == IRCEvent.AUTH_USER.value:
-            u = User(*args)
-        print("event", event)
+        if event not in self._handlers or not self._handlers[event]:
+            print(f"Error: No handler for event {event}", file=sys.stderr)
+            return None
 
-        # if event in self._handlers:
-        #     return self._handlers[event](*args, **kwargs)
-        # print(f"Error: No handler for event {event}", file=sys.stderr)
+        result = args[0] if args else None  # typically a Message
+        for handler in self._handlers[event]:
+            # allow handler to modify/replace result
+            result = handler(result, *args[1:], **kwargs)
+        return result
 
     @classmethod
     def on(cls, event: IRCEvent):
         def decorator(func):
-            cls._handlers[event] = func
+            cls._handlers.setdefault(event, []).append(func)
 
             @wraps(func)
             def wrapper(*args, **kwargs):
