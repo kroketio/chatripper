@@ -74,37 +74,6 @@ class Channel:
     # limit (like +l)
     limit: Optional[int] = None
 
-    # def has_member(self, account: "Account") -> bool:
-    #     return any(m.uid == account.uid for m in self.members)
-    #
-    # def join(self, account: "Account") -> bool:
-    #     """Add a member if not banned and not already in channel."""
-    #     if account.uid in self.bans:
-    #         return False
-    #     if not self.has_member(account):
-    #         self.members.append(account)
-    #     return True
-    #
-    # def part(self, account: "Account", message: str = "") -> None:
-    #     """Remove member from the channel."""
-    #     self.members = [m for m in self.members if m.uid != account.uid]
-    #
-    # def set_topic(self, topic: str) -> None:
-    #     self.topic = topic
-    #
-    # def set_mode(self, mode: str, adding: bool, arg: Optional[str] = None) -> None:
-    #     """Add or remove a channel mode."""
-    #     if adding:
-    #         self.modes[mode] = arg
-    #     else:
-    #         self.modes.pop(mode, None)
-    #
-    # def add_ban(self, mask: str) -> None:
-    #     self.bans.add(mask)
-    #
-    # def remove_ban(self, mask: str) -> None:
-    #     self.bans.discard(mask)
-
 @dataclass
 class AuthUserResult:
     result: bool
