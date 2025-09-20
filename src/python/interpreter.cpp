@@ -199,7 +199,7 @@ static PyObject* py_get_accounts(PyObject* self, PyObject* args) {
         uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
     }
 
-    QList<QVariantMap> accounts = Ctx::instance()->getAccountsByUUIDs(uuids);
+    QList<QVariantMap> accounts = g::ctx->getAccountsByUUIDs(uuids);
     PyObject* pyResult = PyList_New(accounts.size());
     for (int i = 0; i < accounts.size(); ++i) {
         const QVariantMap &map = accounts[i];
@@ -232,7 +232,7 @@ static PyObject* py_get_channels(PyObject* self, PyObject* args) {
         uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
     }
 
-    QList<QVariantMap> channels = Ctx::instance()->getChannelsByUUIDs(uuids);
+    QList<QVariantMap> channels = g::ctx->getChannelsByUUIDs(uuids);
     PyObject* pyResult = PyList_New(channels.size());
     for (int i = 0; i < channels.size(); ++i) {
         const QVariantMap &map = channels[i];
