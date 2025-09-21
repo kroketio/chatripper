@@ -3,6 +3,8 @@
 #include <QSet>
 #include <QByteArray>
 #include <QPointer>
+#include <QJsonArray>
+#include <QJsonObject>
 
 #include "core/account.h"
 #include "irc/client_connection.h"
@@ -23,7 +25,7 @@ public:
   void part(QSharedPointer<Account> &account, const QByteArray &message = "");
   void leave(const QByteArray &account_name);
 
-  void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, const QByteArray &message);
+  void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QByteArray message);
 
   void setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg = {});
 
@@ -79,4 +81,45 @@ private:
   // bans
   QSet<QByteArray> m_ban_masks;
   int m_limit = 0;
+
+public:
+  QVariantMap to_variantmap() {
+    QVariantMap obj;
+
+    obj["uid"] = QString::fromUtf8(uid);
+    obj["name"] = QString::fromUtf8(m_name);
+    obj["topic"] = QString::fromUtf8(m_topic);
+    obj["key"] = QString::fromUtf8(m_key);
+    obj["account_owner_id"] = QString::fromUtf8(m_account_owner_id);
+    obj["limit"] = m_limit;
+    obj["date_creation"] = date_creation.toString(Qt::ISODate);
+
+    // members: list of uid's
+    QVariantList membersArray;
+    for (const auto &member : m_members) {
+      if (member) {
+        membersArray.append(QString::fromUtf8(member->uid()));
+      }
+    }
+    obj["members"] = membersArray;
+
+    // ban masks
+    QVariantList bansArray;
+    for (const auto &mask : m_ban_masks) {
+      bansArray.append(QString::fromUtf8(mask));
+    }
+    obj["ban_masks"] = bansArray;
+
+    // channel modes as a string of letters (e.g., "+imn")
+    QString modeLetters;
+    for (auto it = irc::channelModesLookup.begin(); it != irc::channelModesLookup.end(); ++it) {
+      if (channel_modes.has(it.key())) {
+        modeLetters += it.value().letter;
+      }
+    }
+    obj["modes"] = modeLetters;
+
+    return obj;
+  }
+
 };

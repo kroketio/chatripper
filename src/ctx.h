@@ -33,6 +33,7 @@ public:
   QString homeDir;
 
   irc::Server *irc_server;
+  SnakePit* snakepit = nullptr;
 
   mutable QReadWriteLock mtx_cache;
 
@@ -69,8 +70,6 @@ private slots:
   void onApplicationLog(const QString &msg);
 
 private:
-  Snakes* snakes = nullptr;
-
   QFileInfo m_path_db;
 
   static void createConfigDirectory(const QStringList &lst);

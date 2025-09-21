@@ -49,31 +49,7 @@ Ctx::Ctx() {
   CLOCK_MEASURE_END(start_init_db_preload, "initial db load");
 
   // Python
-  snakes = new Snakes(this);
-
-  connect(snakes, &Snakes::allSnakesStarted, [this] {
-    auto ee = snakes->listModules();
-    snakes->enableModule("TestModule");
-  });
-
-  connect(snakes, &Snakes::modulesRefreshed,
-          [](const QHash<QByteArray, QSharedPointer<ModuleClass>> &modules) {
-      for (auto it = modules.constBegin(); it != modules.constEnd(); ++it) {
-          const auto &mod = it.value();
-          qDebug() << "Name:" << mod->name
-                   << "Author:" << mod->author
-                   << "Enabled:" << mod->enabled
-                   << "Version:" << mod->version
-                   << "Type:" << mod->type;
-
-          for (const auto &h : mod->handlers) {
-              qDebug() << "  Handler Event:" << h.event
-                       << "Method:" << h.method;
-          }
-      }
-  });
-
-  // snakes->enableModule("TestModule");
+  snakepit = new SnakePit(this);
 }
 
 bool Ctx::account_username_exists(const QByteArray &username) const {

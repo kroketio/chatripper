@@ -45,6 +45,11 @@ class QIRCModule:
                 msg.text = msg.text.upper()
                 return msg
 
+            @qirc.on(QIRCEvent.CHANNEL_MSG)
+            def another_handler(self, channel: Channel, acc: Account, msg: Message) -> Message:
+                msg.text = msg.text[::-1]
+                return msg
+
     Attributes:
         name (str): The name of the module.
         version (float): Module version number.
@@ -123,23 +128,27 @@ class QIRCModule:
 
 @dataclass
 class Account:
-    username: str
+    name: str
     nick: str
     password: Optional[str] = None
     host: Optional[str] = None
 
-    id: str = field(default_factory=lambda: str(uuid4()))
+    uid: bytes = field(default_factory=lambda: uuid4())
     creation_date: datetime = field(default_factory=datetime.utcnow)
+
+    channels: List[bytes] = field(default_factory=list)
+
+    connections_count: int = 0
 
     def prefix(self) -> str:
         """nick!username@host."""
-        user = self.username or ""
+        user = self.name or ""
         host = self.host or "localhost"
         return f"{self.nick}!{user}@{host}"
 
 @dataclass
 class Message:
-    id: str = field(default_factory=lambda: str(uuid4()))
+    id: bytes = field(default_factory=lambda: uuid4())
 
     # IRCv3 message tags (key/value strings, e.g. `time`, `msgid`, `account`, `+draft/reply`)
     tags: Dict[str, Optional[str]] = field(default_factory=dict)
@@ -154,38 +163,38 @@ class Message:
 
     account: Optional[Account] = None
 
-    text: str = ""
-    raw: Optional[str] = None
+    text: bytes = ""
+    raw: Optional[bytes] = None
 
     # message originates from server (NOTICE, CTCP replies, etc.)
     from_server: bool = False
 
 @dataclass
+class AuthUserResult:
+    result: bool
+    reason: str  = None
+
+@dataclass
 class Channel:
     """Represents an IRC channel with topic, members, and modes."""
-    uid: str = field(default_factory=lambda: str(uuid4()))
+    uid: bytes = field(default_factory=lambda: uuid4())
     name: str = ""
     topic: str = ""
     key: Optional[str] = None
     account_owner_id: Optional[str] = None
-    creation_date: datetime = field(default_factory=datetime.utcnow)
+    date_creation: datetime = field(default_factory=datetime.utcnow)
 
-    # membership (references to Account objects)
-    members: List["Account"] = field(default_factory=list)
+    # members: List["Account"] = field(default_factory=list)
+    members: List[bytes] = field(default_factory=list)
 
     # channel modes (like +m, +k, +l etc.)
     modes: Dict[str, Optional[str]] = field(default_factory=dict)
 
     # ban masks
-    bans: Set[str] = field(default_factory=set)
+    ban_masks: Set[str] = field(default_factory=set)
 
     # limit (like +l)
     limit: Optional[int] = None
-
-@dataclass
-class AuthUserResult:
-    result: bool
-    reason: str  = None
 
 @dataclass
 class User:
@@ -196,16 +205,29 @@ class User:
 
 class QIRC:
     _handlers = {}
-    _modules = {}  # registered modules
+    _modules = {}
 
     def call(self, event: QIRCEvent, *args, **kwargs):
-        if event not in self._handlers or not self._handlers[event]:
+        ev_enum = QIRCEvent(event)
+        # print("event", ev_enum)
+        # print("args", args)
+        # print("kwargs", kwargs)
+
+        if ev_enum not in self._handlers or not self._handlers[ev_enum]:
             print(f"Error: No handler for event {event}", file=sys.stderr)
             return None
 
-        result = args[0] if args else None  # typically a Message
-        for handler in self._handlers[event]:
-            result = handler(result, *args[1:], **kwargs)
+        if ev_enum is QIRCEvent.CHANNEL_MSG:
+            chan_data, account_data, text = args
+            chan = Channel(**chan_data)
+            account = Account(**account_data)
+            message = Message(id=b"\x00", text=text)
+            print(message)
+            args = (chan, account, message)
+
+        result = args[0] if args else None
+        for handler in self._handlers[ev_enum]:
+            result = handler(result, *args, **kwargs)
         return result
 
     @classmethod

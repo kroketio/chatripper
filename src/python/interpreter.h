@@ -18,14 +18,15 @@ public:
   ~Snake() override;
 
   void setIndex(const int idx) { m_idx = idx; }
-  int idx() const { return m_idx; }
+  [[nodiscard]] int idx() const { return m_idx; }
+
+  [[nodiscard]] QHash<QByteArray, QSharedPointer<ModuleClass>> listModules() const;
 
   static QString version();
   void restart();
 
-  QHash<QByteArray, QSharedPointer<ModuleClass>> modules() const;
-  bool enableModule(const QString &name);
-  bool disableModule(const QString &name);
+  [[nodiscard]] bool enableModule(const QString &name) const;
+  [[nodiscard]] bool disableModule(const QString &name) const;
 
   template<typename... Args>
   QVariant callFunction(const QString &funcName, Args &&... args) {
@@ -35,14 +36,12 @@ public:
 
 public slots:
   void start();
-  Q_INVOKABLE void refreshModules();
 
   // must be Q_INVOKABLE for invokeMethod
-  Q_INVOKABLE QVariant executeFunction(const QString &funcName, const QVariantList &args) const;
+  Q_INVOKABLE [[nodiscard]] QVariant executeFunction(const QString &funcName, const QVariantList &args) const;
 
 signals:
   void started(bool ok);
-  void modulesRefreshed(const QHash<QByteArray, QSharedPointer<ModuleClass>> &modules);
 
 private:
   ThreadInterp* interp_;
@@ -50,8 +49,5 @@ private:
 
   // used by variadic template (callFunction())
   QVariant callFunctionList(const QString &funcName, const QVariantList &args);
-
-  QHash<QByteArray, QSharedPointer<ModuleClass>> modules_;   // qirc.list_modules()
-  mutable QMutex mtx_modules;
 };
 

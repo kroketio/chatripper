@@ -172,8 +172,16 @@ QList<QByteArray> Channel::banList() const {
   return m_ban_masks.values();
 }
 
-void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, const QByteArray &message) {
-  // @TODO: check if user is actually online
+void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QByteArray message) {
+  if (g::ctx->snakepit->hasEventHandler(QIRCEvent::CHANNEL_MSG)) {
+    auto res = g::ctx->snakepit->event(QIRCEvent::CHANNEL_MSG, this->to_variantmap(), from->to_variantmap(), message);
+    if (res.canConvert<QMessage>()) {
+      const auto new_msg = res.value<QMessage>();
+      message = new_msg.text;
+    }
+  }
+
+  // @TODO: check if user is actually online, store stuff in db if not
 
   for (const auto&member: m_members) {
     if (member != from) {
@@ -182,7 +190,7 @@ void Channel::message(const irc::client_connection *from_conn, const QSharedPoin
     } else {  // ourselves
       for (const auto& _conn: from->connections) {
         if (_conn != from_conn)
-          _conn->self_message("#" + m_name, message);  // ZNC_SELF_MESSAGE
+          _conn->self_message("#" + m_name, message);  // ZNC_SELF_MESSAGE  @TODO: remove # nonsense
         else
           continue;  // @TODO: echo-message
       }

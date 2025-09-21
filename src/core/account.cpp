@@ -252,3 +252,27 @@ Account::~Account() {
 void Account::add_channel(const QByteArray& channel) {
   qDebug() << "account" << m_name << "add channel" << channel;
 }
+
+QVariantMap Account::to_variantmap() const {
+  QReadLocker locker(&mtx_lock);
+
+  QVariantMap map;
+  map["uid"] = QString::fromUtf8(m_uid);
+  map["name"] = QString::fromUtf8(m_name);
+  map["nick"] = QString::fromUtf8(m_nick);
+  map["host"] = QString::fromUtf8(m_host.isEmpty() ? g::defaultHost : m_host);
+  map["creation_date"] = creation_date.toString(Qt::ISODate);
+
+  // Channels: store only the channel names the account is part of
+  QVariantList channelList;
+  for (auto it = channels.begin(); it != channels.end(); ++it) {
+    if (it.value()) {
+      channelList.append(QString::fromUtf8(it.value()->uid));
+    }
+  }
+
+  map["channels"] = channelList;
+  map["connections_count"] = connections.size();
+
+  return map;
+}

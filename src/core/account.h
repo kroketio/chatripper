@@ -89,4 +89,7 @@ private:
   QByteArray m_nick;
   QByteArray m_password;
   QByteArray m_host;
+
+public:
+  QVariantMap to_variantmap() const;
 };

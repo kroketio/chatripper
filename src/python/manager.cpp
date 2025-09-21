@@ -2,25 +2,47 @@
 #include <QCoreApplication>
 #include <QMetaObject>
 
-Snakes::Snakes(QObject *parent) : QObject(parent) {
+SnakePit::SnakePit(QObject *parent) : QObject(parent), m_started_counter(0), next_index(0) {
   constexpr int thread_count = 3;
   m_threads.resize(thread_count);
   m_snakes.resize(thread_count);
-  m_startedCounter = 0;
 
   for (int i = 0; i < thread_count; ++i) {
-    const auto thread = new QThread(this);
+    auto *thread = new QThread(this);
     const auto snake = new Snake();
     snake->setIndex(i);
     snake->moveToThread(thread);
 
     // track started interpreters
-    connect(snake, &Snake::started, this, [this, thread_count](const bool ok) {
+    connect(snake, &Snake::started, this, [this, thread_count](bool ok) {
       if (!ok)
         qWarning() << "snake thread failed to start!";
-      m_startedCounter++;
-      if (m_startedCounter == thread_count) {
+      m_started_counter++;
+      if (m_started_counter == thread_count) {
         qDebug() << "all Python interpreters ready";
+
+        // populate modules and active events after start
+        if (!m_snakes.isEmpty()) {
+          QHash<QByteArray, QSharedPointer<ModuleClass>> modules = m_snakes[0]->listModules();
+          Flags<QIRCEvent> activeEvents;
+
+          for (const auto &module : modules) {
+            if (!module->enabled)
+              continue;
+
+            for (const auto &[event, method]: module->handlers)
+              activeEvents.set(event);
+          }
+
+          {
+            QMutexLocker locker(&mtx_refresh);
+            m_modules = modules;
+            m_activeEvents = activeEvents;
+          }
+
+          emit modulesRefreshed(m_modules);
+        }
+
         emit allSnakesStarted();
       }
     }, Qt::UniqueConnection);
@@ -37,67 +59,96 @@ Snakes::Snakes(QObject *parent) : QObject(parent) {
   }
 }
 
-void Snakes::restart() {
+void SnakePit::restart() {
   if (m_snakes.isEmpty())
     return;
 
   QMutexLocker locker(&mtx_snake);
-  m_startedCounter = 0;
+  m_started_counter = 0;
 
-  for (Snake *s: m_snakes) {
+  for (Snake *s: m_snakes)
     QMetaObject::invokeMethod(s, "restart", Qt::BlockingQueuedConnection);
-  }
 }
 
-QHash<QByteArray, QSharedPointer<ModuleClass>> Snakes::listModules() const {
+QHash<QByteArray, QSharedPointer<ModuleClass>> SnakePit::listModules() const {
   if (m_snakes.isEmpty())
     return {};
-  return m_snakes[0]->modules();
+  return m_snakes[0]->listModules();
 }
 
-void Snakes::refreshModulesAll() {
+void SnakePit::refreshModulesAll() {
   if (m_snakes.isEmpty())
     return;
 
-  QMutexLocker locker(&m_refreshMutex);
-  m_refreshCounter = 0;
+  const QHash<QByteArray, QSharedPointer<ModuleClass>> modules = m_snakes[0]->listModules();
+  Flags<QIRCEvent> activeEvents;
 
-  for (Snake *s: m_snakes) {
-    connect(s, &Snake::modulesRefreshed, this, [this](const QHash<QByteArray, QSharedPointer<ModuleClass>> & /*unused*/) {
-      QMutexLocker locker(&m_refreshMutex);
-      m_refreshCounter++;
-      if (m_refreshCounter == m_snakes.size()) {
-        // all threads refreshed; emit manager signal with first thread's modules
-        emit modulesRefreshed(m_snakes[0]->modules());
-      }
-    }, Qt::UniqueConnection);
+  for (auto it = modules.constBegin(); it != modules.constEnd(); ++it) {
+    const auto &module = it.value();
 
-    // trigger refresh in Snake thread
-    QMetaObject::invokeMethod(s, "refreshModules", Qt::QueuedConnection);
+    if (!module->enabled)
+      continue;
+
+    for (const auto &[event, method] : module->handlers)
+      activeEvents.set(event);
   }
+
+  {
+    QMutexLocker locker(&mtx_refresh);
+    m_modules = modules;
+    m_activeEvents = activeEvents;
+  }
+
+  emit modulesRefreshed(m_modules);
 }
 
-bool Snakes::enableModule(const QString &name) {
+bool SnakePit::enableModule(const QString &name) {
   bool ok = true;
-  for (Snake *s: m_snakes)
+  for (Snake *s : m_snakes)
     ok &= s->enableModule(name);
 
-  refreshModulesAll();
+  QMutexLocker locker(&mtx_refresh);
+
+  if (m_modules.contains(name.toUtf8()))
+    m_modules[name.toUtf8()]->enabled = true;
+
+  Flags<QIRCEvent> activeEvents;
+  for (const auto &mod : m_modules) {
+    if (!mod->enabled)
+      continue;
+
+    for (const auto &[event, method] : mod->handlers)
+      activeEvents.set(event);
+  }
+  m_activeEvents = activeEvents;
+
   return ok;
 }
 
-bool Snakes::disableModule(const QString &name) {
+bool SnakePit::disableModule(const QString &name) {
   bool ok = true;
-  for (Snake *s: m_snakes)
+  for (const Snake *s : m_snakes)
     ok &= s->disableModule(name);
 
-  refreshModulesAll();
+  QMutexLocker locker(&mtx_refresh);
+
+  if (m_modules.contains(name.toUtf8()))
+    m_modules[name.toUtf8()]->enabled = false;
+
+  Flags<QIRCEvent> activeEvents;
+  for (const auto &mod : m_modules) {
+    if (!mod->enabled)
+      continue;
+    for (const auto &[event, method] : mod->handlers)
+      activeEvents.set(event);
+  }
+  m_activeEvents = activeEvents;
+
   return ok;
 }
 
-QVariant Snakes::callFunctionList(const QString &funcName, const QVariantList &args) {
+QVariant SnakePit::callFunctionList(const QString &funcName, const QVariantList &args) {
   QMutexLocker locker(&mtx_snake);
-
   if (m_snakes.isEmpty())
     return {};
 
@@ -107,24 +158,31 @@ QVariant Snakes::callFunctionList(const QString &funcName, const QVariantList &a
 
   QVariant returnValue;
   QMetaObject::invokeMethod(
-      target,
-      "executeFunction",
-      Qt::BlockingQueuedConnection, // sync
-      Q_RETURN_ARG(QVariant, returnValue),
-      Q_ARG(QString, funcName),
-      Q_ARG(QVariantList, args)
-      );
+    target,
+    "executeFunction",
+    Qt::BlockingQueuedConnection,
+    Q_RETURN_ARG(QVariant, returnValue),
+    Q_ARG(QString, funcName),
+    Q_ARG(QVariantList, args));
 
   return returnValue;
 }
 
-// snake? snaakeeeeee
-Snakes::~Snakes() {
-  for (QThread *t: m_threads) {
+bool SnakePit::hasEventHandler(QIRCEvent event) const {
+  QReadLocker locker(&m_activeEventsLock);
+  return m_activeEvents.has(event);
+}
+
+Flags<QIRCEvent> SnakePit::activeEvents() const {
+  QReadLocker locker(&m_activeEventsLock);
+  return m_activeEvents;
+}
+
+SnakePit::~SnakePit() {
+  for (QThread *t : m_threads) {
     if (t && t->isRunning()) {
       t->quit();
       t->wait();
     }
   }
-  // eliminated via finished->deleteLater()
 }
