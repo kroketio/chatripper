@@ -50,6 +50,11 @@ Ctx::Ctx() {
 
   // Python
   snakes = new Snakes(this);
+  snakes->refreshModulesAll();
+
+  connect(snakes, &Snakes::modulesRefreshed, [](const QJsonObject &modules){
+    qDebug() << "Modules updated:" << modules;
+  });
 }
 
 bool Ctx::account_username_exists(const QByteArray &username) const {

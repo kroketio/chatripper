@@ -17,12 +17,18 @@ public:
   explicit Snakes(QObject *parent = nullptr);
   ~Snakes() override;
 
+  void restart();
+  void refreshModulesAll();
+
   // callFunctionList wrapper
   template<typename... Args>
   QVariant callFunction(const QString &funcName, Args&&... args) {
     const QVariantList argList{QVariant(std::forward<Args>(args))...};
     return callFunctionList(funcName, argList);
   }
+
+signals:
+  void modulesRefreshed(const QJsonObject &modules);
 
 private:
   QVariant callFunctionList(const QString &funcName, const QVariantList &args);
@@ -31,4 +37,11 @@ private:
   QVector<Snake*> m_snakes;
   int next_index;
   QMutex mtx_snake;
+
+  QJsonObject listModules() const;
+  bool enableModule(const QString &name);
+  bool disableModule(const QString &name);
+
+  int m_refreshCounter = 0;
+  mutable QMutex m_refreshMutex;
 };

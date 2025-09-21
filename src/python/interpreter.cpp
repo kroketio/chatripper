@@ -14,24 +14,24 @@
 #include "python/utils.h"
 
 struct ThreadInterp {
-  PyThreadState* tstate;
+  PyThreadState *tstate;
 };
 
-static PyObject* py_get_channels(PyObject* self, PyObject* args);
-static PyObject* py_get_accounts(PyObject* self, PyObject* args);
+static PyObject *py_get_channels(PyObject *self, PyObject *args);
+static PyObject *py_get_accounts(PyObject *self, PyObject *args);
 
 static PyMethodDef SnakeMethods[] = {
-  {"get_accounts", py_get_accounts, METH_VARARGS, "Get accounts by UUIDs"},
-  {"get_channels", py_get_channels, METH_VARARGS, "Get channels by UUIDs"},
-  {nullptr, nullptr, 0, nullptr} // sentinel
+    {"get_accounts", py_get_accounts, METH_VARARGS, "Get accounts by UUIDs"},
+    {"get_channels", py_get_channels, METH_VARARGS, "Get channels by UUIDs"},
+    {nullptr, nullptr, 0, nullptr} // sentinel
 };
 
 static struct PyModuleDef SnakeModule = {
-  PyModuleDef_HEAD_INIT,
-  "snake", // module name
-  "Snake C++ module",
-  -1,
-  SnakeMethods
+    PyModuleDef_HEAD_INIT,
+    "snake", // module name
+    "Snake C++ module",
+    -1,
+    SnakeMethods
 };
 
 Snake::Snake(QObject *parent) : QObject(parent), interp_(nullptr) {}
@@ -54,7 +54,7 @@ void Snake::start() {
   // own GIL per interpreter
   config.gil = PyInterpreterConfig_OWN_GIL;
 
-  PyThreadState* tstate = nullptr;
+  PyThreadState *tstate = nullptr;
   const PyStatus status = Py_NewInterpreterFromConfig(&tstate, &config);
   if (PyStatus_Exception(status)) {
     qWarning() << "Failed to create sub-interpreter:" << status.err_msg;
@@ -66,14 +66,15 @@ void Snake::start() {
   // make the sub-interpreter current
   PyThreadState_Swap(interp_->tstate);
 
-  PyObject* pyModule = PyModule_Create(&SnakeModule);
+  PyObject *pyModule = PyModule_Create(&SnakeModule);
   if (!pyModule) {
     qWarning() << "Failed to create snake module";
-  } else {
-    PyObject* mainModule = PyImport_AddModule("__main__");
-    PyObject* mainDict = PyModule_GetDict(mainModule);
-    PyDict_SetItemString(mainDict, "snake", pyModule);
+    return; // @TODO: better return codes
   }
+
+  PyObject *mainModule = PyImport_AddModule("__main__");
+  PyObject *mainDict = PyModule_GetDict(mainModule);
+  PyDict_SetItemString(mainDict, "snake", pyModule);
 
 #ifdef DEBUG
   const QString modulePath = "/home/dsc/CLionProjects/chat/server/python/modules";
@@ -87,7 +88,7 @@ void Snake::start() {
   dir.setNameFilters(filters);
   QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
 
-  for (const QFileInfo &fileInfo : fileList) {
+  for (const QFileInfo &fileInfo: fileList) {
     if (!fileInfo.fileName().startsWith("mod_"))
       continue;
 
@@ -103,8 +104,17 @@ void Snake::start() {
     }
   }
 
+  PyObject *result = PyRun_String("qirc.list_modules()", Py_eval_input, mainDict, mainDict);
+
+  if (!result) {
+    qWarning() << "could not list modules";
+    return; // @TODO: better error
+  }
+
   // release the GIL when done
   interp_->tstate = PyEval_SaveThread();
+
+  // refreshModules();
 }
 
 void Snake::restart() {
@@ -115,18 +125,89 @@ void Snake::restart() {
     interp_ = nullptr;
   }
 
-  start();  // recreate sub-interpreter
+  start(); // recreate sub-interpreter
 }
 
 QVariant Snake::callFunctionList(const QString &funcName, const QVariantList &args) {
   QVariant result;
   QMetaObject::invokeMethod(
-    this, "executeFunction",
-    Qt::BlockingQueuedConnection,
-    Q_RETURN_ARG(QVariant, result),
-    Q_ARG(QString, funcName),
-    Q_ARG(QVariantList, args));
+      this, "executeFunction",
+      Qt::BlockingQueuedConnection,
+      Q_RETURN_ARG(QVariant, result),
+      Q_ARG(QString, funcName),
+      Q_ARG(QVariantList, args));
   return result;
+}
+
+QJsonObject Snake::modules() const {
+  QMutexLocker locker(&mtx_modules);
+  return modules_;
+}
+
+void Snake::refreshModules() {
+  if (!interp_) return;
+  PyEval_RestoreThread(interp_->tstate);
+
+  PyObject* mainModule = PyImport_AddModule("__main__");
+  PyObject* mainDict = PyModule_GetDict(mainModule);
+
+  PyObject* refresh = PyRun_String("qirc.list_modules()", Py_eval_input, mainDict, mainDict);
+  if (refresh) {
+    QVariant modules_obj = PyObjectToQVariant(refresh);
+    {
+      QMutexLocker locker(&mtx_modules);
+      modules_ = modules_obj.toJsonObject();
+    }
+    Py_DECREF(refresh);
+  }
+
+  interp_->tstate = PyEval_SaveThread();
+
+  emit modulesRefreshed(modules_); // signal that this thread refreshed
+}
+
+bool Snake::enableModule(const QString &name) {
+  if (!interp_)
+    return false;
+  PyEval_RestoreThread(interp_->tstate);
+
+  PyObject *mainModule = PyImport_AddModule("__main__");
+  PyObject *mainDict = PyModule_GetDict(mainModule);
+
+  QString code = QString("qirc.enable_module('%1')").arg(name);
+  PyObject *result = PyRun_String(code.toUtf8().constData(),
+                                  Py_eval_input, mainDict, mainDict);
+  bool ok = (result != nullptr);
+  Py_XDECREF(result);
+
+  interp_->tstate = PyEval_SaveThread();
+
+  if (ok)
+    refreshModules(); // update the cached JSON
+
+  return ok;
+}
+
+bool Snake::disableModule(const QString &name) {
+  if (!interp_)
+    return false;
+  PyEval_RestoreThread(interp_->tstate);
+
+  PyObject *mainModule = PyImport_AddModule("__main__");
+  PyObject *mainDict = PyModule_GetDict(mainModule);
+
+  QString code = QString("qirc.disable_module('%1')").arg(name);
+  PyObject *result = PyRun_String(code.toUtf8().constData(),
+                                  Py_eval_input, mainDict, mainDict);
+  bool ok = (result != nullptr);
+  Py_XDECREF(result);
+
+  interp_->tstate = PyEval_SaveThread();
+
+  if (ok)
+    refreshModules(); // update the cached JSON
+
+  return ok;
 }
 
 QString Snake::version() {
@@ -152,18 +233,18 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
 
   PyEval_RestoreThread(interp_->tstate);
 
-  PyObject* mainModule = PyImport_AddModule("__main__");
-  PyObject* mainDict = PyModule_GetDict(mainModule);
-  PyObject* pyFunc = PyDict_GetItemString(mainDict, funcName.toUtf8().constData());
+  PyObject *mainModule = PyImport_AddModule("__main__");
+  PyObject *mainDict = PyModule_GetDict(mainModule);
+  PyObject *pyFunc = PyDict_GetItemString(mainDict, funcName.toUtf8().constData());
 
   if (pyFunc && PyCallable_Check(pyFunc)) {
-    PyObject* pyArgs = PyTuple_New(args.size());
+    PyObject *pyArgs = PyTuple_New(args.size());
     for (int i = 0; i < args.size(); ++i) {
-      PyObject* pyObj = QVariantToPyObject(args[i]);
+      PyObject *pyObj = QVariantToPyObject(args[i]);
       PyTuple_SetItem(pyArgs, i, pyObj); // steals reference
     }
 
-    PyObject* pyResult = PyObject_CallObject(pyFunc, pyArgs);
+    PyObject *pyResult = PyObject_CallObject(pyFunc, pyArgs);
     Py_DECREF(pyArgs);
 
     if (pyResult) {
@@ -181,68 +262,68 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
   return result;
 }
 
-static PyObject* py_get_accounts(PyObject* self, PyObject* args) {
+static PyObject *py_get_accounts(PyObject *self, PyObject *args) {
   CLOCK_MEASURE_START(wow);
-    PyObject* pyList;
-    if (!PyArg_ParseTuple(args, "O!", &PyList_Type, &pyList)) {
-        return nullptr;
-    }
+  PyObject *pyList;
+  if (!PyArg_ParseTuple(args, "O!", &PyList_Type, &pyList)) {
+    return nullptr;
+  }
 
-    QList<QByteArray> uuids;
-    Py_ssize_t len = PyList_Size(pyList);
-    for (Py_ssize_t i = 0; i < len; ++i) {
-        PyObject* item = PyList_GetItem(pyList, i);
-        if (!PyUnicode_Check(item)) {
-            PyErr_SetString(PyExc_TypeError, "UUIDs must be strings");
-            return nullptr;
-        }
-        uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
+  QList<QByteArray> uuids;
+  Py_ssize_t len = PyList_Size(pyList);
+  for (Py_ssize_t i = 0; i < len; ++i) {
+    PyObject *item = PyList_GetItem(pyList, i);
+    if (!PyUnicode_Check(item)) {
+      PyErr_SetString(PyExc_TypeError, "UUIDs must be strings");
+      return nullptr;
     }
+    uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
+  }
 
-    QList<QVariantMap> accounts = g::ctx->getAccountsByUUIDs(uuids);
-    PyObject* pyResult = PyList_New(accounts.size());
-    for (int i = 0; i < accounts.size(); ++i) {
-        const QVariantMap &map = accounts[i];
-        PyObject* pyDict = PyDict_New();
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-            PyDict_SetItemString(pyDict, it.key().toUtf8().constData(),
-                                 PyUnicode_FromString(it.value().toString().toUtf8().constData()));
-        }
-        PyList_SetItem(pyResult, i, pyDict);  // steals reference
+  QList<QVariantMap> accounts = g::ctx->getAccountsByUUIDs(uuids);
+  PyObject *pyResult = PyList_New(accounts.size());
+  for (int i = 0; i < accounts.size(); ++i) {
+    const QVariantMap &map = accounts[i];
+    PyObject *pyDict = PyDict_New();
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+      PyDict_SetItemString(pyDict, it.key().toUtf8().constData(),
+                           PyUnicode_FromString(it.value().toString().toUtf8().constData()));
     }
+    PyList_SetItem(pyResult, i, pyDict); // steals reference
+  }
 
-    CLOCK_MEASURE_END(wow, "wowowowow");
-    return pyResult;
+  CLOCK_MEASURE_END(wow, "wowowowow");
+  return pyResult;
 }
 
-static PyObject* py_get_channels(PyObject* self, PyObject* args) {
-    PyObject* pyList;
-    if (!PyArg_ParseTuple(args, "O!", &PyList_Type, &pyList)) {
-        return nullptr;
-    }
+static PyObject *py_get_channels(PyObject *self, PyObject *args) {
+  PyObject *pyList;
+  if (!PyArg_ParseTuple(args, "O!", &PyList_Type, &pyList)) {
+    return nullptr;
+  }
 
-    QList<QByteArray> uuids;
-    Py_ssize_t len = PyList_Size(pyList);
-    for (Py_ssize_t i = 0; i < len; ++i) {
-        PyObject* item = PyList_GetItem(pyList, i);
-        if (!PyUnicode_Check(item)) {
-            PyErr_SetString(PyExc_TypeError, "UUIDs must be strings");
-            return nullptr;
-        }
-        uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
+  QList<QByteArray> uuids;
+  Py_ssize_t len = PyList_Size(pyList);
+  for (Py_ssize_t i = 0; i < len; ++i) {
+    PyObject *item = PyList_GetItem(pyList, i);
+    if (!PyUnicode_Check(item)) {
+      PyErr_SetString(PyExc_TypeError, "UUIDs must be strings");
+      return nullptr;
     }
+    uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
+  }
 
-    QList<QVariantMap> channels = g::ctx->getChannelsByUUIDs(uuids);
-    PyObject* pyResult = PyList_New(channels.size());
-    for (int i = 0; i < channels.size(); ++i) {
-        const QVariantMap &map = channels[i];
-        PyObject* pyDict = PyDict_New();
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-            PyDict_SetItemString(pyDict, it.key().toUtf8().constData(),
-                                 PyUnicode_FromString(it.value().toString().toUtf8().constData()));
-        }
-        PyList_SetItem(pyResult, i, pyDict);
+  QList<QVariantMap> channels = g::ctx->getChannelsByUUIDs(uuids);
+  PyObject *pyResult = PyList_New(channels.size());
+  for (int i = 0; i < channels.size(); ++i) {
+    const QVariantMap &map = channels[i];
+    PyObject *pyDict = PyDict_New();
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+      PyDict_SetItemString(pyDict, it.key().toUtf8().constData(),
+                           PyUnicode_FromString(it.value().toString().toUtf8().constData()));
     }
+    PyList_SetItem(pyResult, i, pyDict);
+  }
 
-    return pyResult;
+  return pyResult;
 }

@@ -196,6 +196,7 @@ class User:
 
 class QIRC:
     _handlers = {}
+    _modules = {}  # registered modules
 
     def call(self, event: QIRCEvent, *args, **kwargs):
         if event not in self._handlers or not self._handlers[event]:
@@ -204,12 +205,12 @@ class QIRC:
 
         result = args[0] if args else None  # typically a Message
         for handler in self._handlers[event]:
-            # allow handler to modify/replace result
             result = handler(result, *args[1:], **kwargs)
         return result
 
     @classmethod
     def on(cls, event: QIRCEvent):
+        """Decorator to register an event handler."""
         def decorator(func):
             cls._handlers.setdefault(event, []).append(func)
 
@@ -225,15 +226,34 @@ class QIRC:
             return wrapper
         return decorator
 
-def is_auth(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        user = args[0] if args else None
-        if user and getattr(user, 'is_authenticated', False):
-            return func(*args, **kwargs)
-        else:
-            raise PermissionError("User is not authenticated")
-    return wrapper
+    # --- module management ---
+
+    @classmethod
+    def register_module(cls, module):
+        """Register a module instance."""
+        if module.name in cls._modules:
+            raise ValueError(f"Module '{module.name}' is already registered.")
+        cls._modules[module.name] = module
+        return module
+
+    @classmethod
+    def list_modules(cls) -> dict:
+        """Return descriptions of all registered modules."""
+        return {name: mod.describe() for name, mod in cls._modules.items()}
+
+    @classmethod
+    def enable_module(cls, name: str):
+        """Enable a registered module by name."""
+        if name not in cls._modules:
+            raise KeyError(f"Module '{name}' is not registered.")
+        cls._modules[name].enable()
+
+    @classmethod
+    def disable_module(cls, name: str):
+        """Disable a registered module by name."""
+        if name not in cls._modules:
+            raise KeyError(f"Module '{name}' is not registered.")
+        cls._modules[name].disable()
 
 qirc = QIRC()
 __qirc_call = lambda *args, **kwargs: qirc.call(*args, **kwargs)
