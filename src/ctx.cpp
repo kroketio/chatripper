@@ -45,29 +45,11 @@ Ctx::Ctx() {
     channel->addMembers(accounts_channels);
   }
 
-  SQL::account_get_all();  // just to trigger cache insertion
+  SQL::account_get_all();  // trigger cache insertion
   CLOCK_MEASURE_END(start_init_db_preload, "initial db load");
 
   // Python
   snakes = new Snakes(this);
-}
-
-void onChannelMemberJoined(const QSharedPointer<Account> &account) {
-  // g::ctx->accounts.value(account->name);
-}
-
-void onChannelMemberJoinedFailed(const QSharedPointer<Account> &account) {
-
-}
-
-void Ctx::createConfigDirectory(const QStringList &lst) {
-  for(const auto &d: lst) {
-    if(!std::filesystem::exists(d.toStdString())) {
-      qDebug() << QString("Creating directory: %1").arg(d);
-      if(!QDir().mkpath(d))
-        throw std::runtime_error("Could not create directory " + d.toStdString());
-    }
-  }
 }
 
 bool Ctx::account_username_exists(const QByteArray &username) const {
@@ -182,6 +164,25 @@ void Ctx::startIRC(const int port, const QByteArray& password) {
   }
 }
 
+void Ctx::createConfigDirectory(const QStringList &lst) {
+  for(const auto &d: lst) {
+    if(std::filesystem::exists(d.toStdString()))
+      continue;
+
+    qDebug() << QString("Creating directory: %1").arg(d);
+    if(!QDir().mkpath(d))
+      throw std::runtime_error("Could not create directory " + d.toStdString());
+  }
+}
+
 void Ctx::onApplicationLog(const QString &msg) {}
+
+void onChannelMemberJoined(const QSharedPointer<Account> &account) {
+  // g::ctx->accounts.value(account->name);
+}
+
+void onChannelMemberJoinedFailed(const QSharedPointer<Account> &account) {
+
+}
 
 Ctx::~Ctx() {}
