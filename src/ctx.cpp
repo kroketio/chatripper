@@ -50,11 +50,30 @@ Ctx::Ctx() {
 
   // Python
   snakes = new Snakes(this);
-  snakes->refreshModulesAll();
 
-  connect(snakes, &Snakes::modulesRefreshed, [](const QJsonObject &modules){
-    qDebug() << "Modules updated:" << modules;
+  connect(snakes, &Snakes::allSnakesStarted, [this] {
+    auto ee = snakes->listModules();
+    snakes->enableModule("TestModule");
   });
+
+  connect(snakes, &Snakes::modulesRefreshed,
+          [](const QHash<QByteArray, QSharedPointer<ModuleClass>> &modules) {
+      for (auto it = modules.constBegin(); it != modules.constEnd(); ++it) {
+          const auto &mod = it.value();
+          qDebug() << "Name:" << mod->name
+                   << "Author:" << mod->author
+                   << "Enabled:" << mod->enabled
+                   << "Version:" << mod->version
+                   << "Type:" << mod->type;
+
+          for (const auto &h : mod->handlers) {
+              qDebug() << "  Handler Event:" << h.event
+                       << "Method:" << h.method;
+          }
+      }
+  });
+
+  // snakes->enableModule("TestModule");
 }
 
 bool Ctx::account_username_exists(const QByteArray &username) const {

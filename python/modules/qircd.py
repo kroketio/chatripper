@@ -41,7 +41,7 @@ class QIRCModule:
                 print("module deinit code here")
 
             @qirc.on(QIRCEvent.CHANNEL_MSG)
-            def some_handler(self, acc: Account, msg: Message) -> Message:
+            def some_handler(self, channel: Channel, acc: Account, msg: Message) -> Message:
                 msg.text = msg.text.upper()
                 return msg
 
@@ -254,6 +254,12 @@ class QIRC:
         if name not in cls._modules:
             raise KeyError(f"Module '{name}' is not registered.")
         cls._modules[name].disable()
+
+    @classmethod
+    def interpreter_idx(cls) -> int:
+        """Returns the interpreter idx"""
+        import __main__
+        return getattr(__main__, "INTERPRETER_IDX", -1)
 
 qirc = QIRC()
 __qirc_call = lambda *args, **kwargs: qirc.call(*args, **kwargs)

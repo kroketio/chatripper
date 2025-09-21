@@ -46,18 +46,16 @@ void Snake::start() {
   // If use_main_obmalloc is 0 then check_multi_interp_extensions must be 1 (non-zero).
   config.use_main_obmalloc = 0;
   config.check_multi_interp_extensions = 1;
-
   config.allow_threads = 1;
   config.allow_fork = 1;
   config.allow_exec = 1;
-
-  // own GIL per interpreter
   config.gil = PyInterpreterConfig_OWN_GIL;
 
   PyThreadState *tstate = nullptr;
   const PyStatus status = Py_NewInterpreterFromConfig(&tstate, &config);
   if (PyStatus_Exception(status)) {
     qWarning() << "Failed to create sub-interpreter:" << status.err_msg;
+    emit started(false);
     return;
   }
 
@@ -66,25 +64,34 @@ void Snake::start() {
   // make the sub-interpreter current
   PyThreadState_Swap(interp_->tstate);
 
+  PyObject *main_module = PyImport_AddModule("__main__");
+  PyObject *main_dict = PyModule_GetDict(main_module);
+
+  // inject interpreter idx
+  PyObject* pyIdx = PyLong_FromLong(m_idx);  // idx_ is the Snake interpreter index
+  PyDict_SetItemString(main_dict, "INTERPRETER_IDX", pyIdx);
+  Py_DECREF(pyIdx);
+
+  // inject snake module
   PyObject *pyModule = PyModule_Create(&SnakeModule);
   if (!pyModule) {
     qWarning() << "Failed to create snake module";
-    return; // @TODO: better return codes
+    emit started(false);
+    return;
   }
 
-  PyObject *mainModule = PyImport_AddModule("__main__");
-  PyObject *mainDict = PyModule_GetDict(mainModule);
-  PyDict_SetItemString(mainDict, "snake", pyModule);
+  PyDict_SetItemString(main_dict, "snake", pyModule);
 
 #ifdef DEBUG
   const QString modulePath = "/home/dsc/CLionProjects/chat/server/python/modules";
 #else
-  const QString modulePath = g::pythonModulesDirectory;
+    const QString modulePath = g::pythonModulesDirectory;
 #endif
   PyRun_SimpleString(QString("import sys; sys.path.append('%1')").arg(modulePath).toUtf8().constData());
 
+  // load user modules
   QDir dir(modulePath);
-  QStringList filters{"*.py"};
+  const QStringList filters{"*.py"};
   dir.setNameFilters(filters);
   QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
 
@@ -93,28 +100,45 @@ void Snake::start() {
       continue;
 
     QFile py_file(fileInfo.absoluteFilePath());
-    if (py_file.open(QIODevice::ReadOnly)) {
-      QByteArray content = py_file.readAll();
-      py_file.close();
+    if (!py_file.open(QIODevice::ReadOnly)) {
+      qWarning() << "Could not open" << fileInfo.fileName();
+      continue;
+    }
 
-      if (PyRun_SimpleString(content.constData()) != 0)
-        qWarning() << "Error executing" << fileInfo.fileName();
+    QByteArray content = py_file.readAll();
+    py_file.close();
 
-      // qDebug() << "Executed" << fileInfo.fileName();
+    if (PyRun_SimpleString(content.constData()) != 0) {
+      qWarning() << "Error executing" << fileInfo.fileName();
     }
   }
 
-  PyObject *result = PyRun_String("qirc.list_modules()", Py_eval_input, mainDict, mainDict);
-
+  // inspect available user modules
+  PyObject *result = PyRun_String("qirc.list_modules()", Py_eval_input, main_dict, main_dict);
   if (!result) {
-    qWarning() << "could not list modules";
-    return; // @TODO: better error
+    qWarning() << "Could not list modules";
+    emit started(false);
+    return;
   }
 
-  // release the GIL when done
+  const QVariant modules_obj = PyObjectToQVariant(result);
+  QHash<QByteArray, QSharedPointer<ModuleClass>> newModules;
+  const QJsonObject jsonModules = modules_obj.toJsonObject();
+  for (auto it = jsonModules.constBegin(); it != jsonModules.constEnd(); ++it)
+    newModules.insert(it.key().toUtf8(), ModuleClass::fromJson(it.value().toObject()));
+
+  {
+    QMutexLocker locker(&mtx_modules);
+    modules_ = newModules;
+  }
+
+  Py_DECREF(result);
+
+  // release GIL
   interp_->tstate = PyEval_SaveThread();
 
-  // refreshModules();
+  qDebug() << QString("Python interpreter %1 initialized").arg(m_idx);
+  emit started(true);
 }
 
 void Snake::restart() {
@@ -139,31 +163,40 @@ QVariant Snake::callFunctionList(const QString &funcName, const QVariantList &ar
   return result;
 }
 
-QJsonObject Snake::modules() const {
+QHash<QByteArray, QSharedPointer<ModuleClass>> Snake::modules() const {
   QMutexLocker locker(&mtx_modules);
   return modules_;
 }
 
 void Snake::refreshModules() {
-  if (!interp_) return;
+  if (!interp_)
+    return;
   PyEval_RestoreThread(interp_->tstate);
 
-  PyObject* mainModule = PyImport_AddModule("__main__");
-  PyObject* mainDict = PyModule_GetDict(mainModule);
+  PyObject *main_module = PyImport_AddModule("__main__");
+  PyObject *main_dict = PyModule_GetDict(main_module);
 
-  PyObject* refresh = PyRun_String("qirc.list_modules()", Py_eval_input, mainDict, mainDict);
+  PyObject *refresh = PyRun_String("qirc.list_modules()", Py_eval_input, main_dict, main_dict);
   if (refresh) {
-    QVariant modules_obj = PyObjectToQVariant(refresh);
+    const QVariant modules_obj = PyObjectToQVariant(refresh);
+    const QJsonObject modules_json = modules_obj.toJsonObject();
+
+    QHash<QByteArray, QSharedPointer<ModuleClass>> modules;
+    for (auto it = modules_json.constBegin(); it != modules_json.constEnd(); ++it) {
+      modules.insert(it.key().toUtf8(), ModuleClass::fromJson(it.value().toObject()));
+    }
+
     {
       QMutexLocker locker(&mtx_modules);
-      modules_ = modules_obj.toJsonObject();
+      modules_ = modules;
     }
+
     Py_DECREF(refresh);
+
+    emit modulesRefreshed(modules_);
   }
 
   interp_->tstate = PyEval_SaveThread();
-
-  emit modulesRefreshed(modules_); // signal that this thread refreshed
 }
 
 bool Snake::enableModule(const QString &name) {
@@ -171,19 +204,18 @@ bool Snake::enableModule(const QString &name) {
     return false;
   PyEval_RestoreThread(interp_->tstate);
 
-  PyObject *mainModule = PyImport_AddModule("__main__");
-  PyObject *mainDict = PyModule_GetDict(mainModule);
+  PyObject *main_module = PyImport_AddModule("__main__");
+  PyObject *main_dict = PyModule_GetDict(main_module);
+  const QString code = QString("qirc.enable_module('%1')").arg(name);
 
-  QString code = QString("qirc.enable_module('%1')").arg(name);
-  PyObject *result = PyRun_String(code.toUtf8().constData(),
-                                  Py_eval_input, mainDict, mainDict);
-  bool ok = (result != nullptr);
+  PyObject *result = PyRun_String(code.toUtf8().constData(), Py_eval_input, main_dict, main_dict);
+  const bool ok = (result != nullptr);
   Py_XDECREF(result);
 
   interp_->tstate = PyEval_SaveThread();
 
   if (ok)
-    refreshModules(); // update the cached JSON
+    refreshModules();
 
   return ok;
 }
@@ -193,13 +225,12 @@ bool Snake::disableModule(const QString &name) {
     return false;
   PyEval_RestoreThread(interp_->tstate);
 
-  PyObject *mainModule = PyImport_AddModule("__main__");
-  PyObject *mainDict = PyModule_GetDict(mainModule);
+  PyObject *main_module = PyImport_AddModule("__main__");
+  PyObject *main_dict = PyModule_GetDict(main_module);
 
-  QString code = QString("qirc.disable_module('%1')").arg(name);
-  PyObject *result = PyRun_String(code.toUtf8().constData(),
-                                  Py_eval_input, mainDict, mainDict);
-  bool ok = (result != nullptr);
+  const QString code = QString("qirc.disable_module('%1')").arg(name);
+  PyObject *result = PyRun_String(code.toUtf8().constData(), Py_eval_input, main_dict, main_dict);
+  const bool ok = (result != nullptr);
   Py_XDECREF(result);
 
   interp_->tstate = PyEval_SaveThread();
@@ -233,9 +264,9 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
 
   PyEval_RestoreThread(interp_->tstate);
 
-  PyObject *mainModule = PyImport_AddModule("__main__");
-  PyObject *mainDict = PyModule_GetDict(mainModule);
-  PyObject *pyFunc = PyDict_GetItemString(mainDict, funcName.toUtf8().constData());
+  PyObject *main_module = PyImport_AddModule("__main__");
+  PyObject *main_dict = PyModule_GetDict(main_module);
+  PyObject *pyFunc = PyDict_GetItemString(main_dict, funcName.toUtf8().constData());
 
   if (pyFunc && PyCallable_Check(pyFunc)) {
     PyObject *pyArgs = PyTuple_New(args.size());
