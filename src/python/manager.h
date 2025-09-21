@@ -48,6 +48,9 @@ signals:
   void allSnakesStarted();
   void modulesRefreshed(const QHash<QByteArray, QSharedPointer<ModuleClass>> &modules);
 
+private slots:
+  void onSnakeStarted(bool ok);
+
 private:
   QHash<QByteArray, QSharedPointer<ModuleClass>> m_modules;
 

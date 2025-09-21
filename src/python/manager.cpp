@@ -14,38 +14,7 @@ SnakePit::SnakePit(QObject *parent) : QObject(parent), m_started_counter(0), nex
     snake->moveToThread(thread);
 
     // track started interpreters
-    connect(snake, &Snake::started, this, [this, thread_count](bool ok) {
-      if (!ok)
-        qWarning() << "snake thread failed to start!";
-      m_started_counter++;
-      if (m_started_counter == thread_count) {
-        qDebug() << "all Python interpreters ready";
-
-        // populate modules and active events after start
-        if (!m_snakes.isEmpty()) {
-          QHash<QByteArray, QSharedPointer<ModuleClass>> modules = m_snakes[0]->listModules();
-          Flags<QIRCEvent> activeEvents;
-
-          for (const auto &module : modules) {
-            if (!module->enabled)
-              continue;
-
-            for (const auto &[event, method]: module->handlers)
-              activeEvents.set(event);
-          }
-
-          {
-            QMutexLocker locker(&mtx_refresh);
-            m_modules = modules;
-            m_activeEvents = activeEvents;
-          }
-
-          emit modulesRefreshed(m_modules);
-        }
-
-        emit allSnakesStarted();
-      }
-    }, Qt::UniqueConnection);
+    connect(snake, &Snake::started, this, &SnakePit::onSnakeStarted, Qt::UniqueConnection);
 
     connect(thread, &QThread::started, snake, &Snake::start);
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, thread, &QThread::quit);
@@ -58,6 +27,41 @@ SnakePit::SnakePit(QObject *parent) : QObject(parent), m_started_counter(0), nex
     thread->start();
   }
 }
+
+void SnakePit::onSnakeStarted(bool ok) {
+  if (!ok) {
+    qWarning() << "snake thread failed to start!";
+  }
+
+  m_started_counter++;
+
+  constexpr int thread_count = 3; // keep in sync with your constructor
+  if (m_started_counter == thread_count) {
+    qDebug() << "all Python interpreters ready";
+
+    if (!m_snakes.isEmpty()) {
+      QHash<QByteArray, QSharedPointer<ModuleClass>> modules = m_snakes[0]->listModules();
+      Flags<QIRCEvent> activeEvents;
+
+      for (auto it = modules.constBegin(); it != modules.constEnd(); ++it) {
+        const auto &module = it.value();
+        if (!module->enabled)
+          continue;
+        for (const auto &[event, method] : module->handlers)
+          activeEvents.set(event);
+      }
+
+      QMutexLocker locker(&mtx_refresh);
+      m_modules = modules;
+      m_activeEvents = activeEvents;
+
+      emit modulesRefreshed(m_modules);
+    }
+
+    emit allSnakesStarted();
+  }
+}
+
 
 void SnakePit::restart() {
   if (m_snakes.isEmpty())
