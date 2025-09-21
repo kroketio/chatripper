@@ -10,6 +10,7 @@ namespace g {
   extern QString homeDir;
   extern QString configDirectory;
   extern QString pythonModulesDirectory;
+  extern QString uploadsDirectory;
   extern QString cacheDirectory;
   extern QByteArray defaultHost;
   extern QFileInfo pathDatabase;

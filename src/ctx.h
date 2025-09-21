@@ -16,6 +16,8 @@
 #include "lib/globals.h"
 #include "lib/sql.h"
 
+#include "web/webserver.h"
+
 #include "core/channel.h"
 #include "core/account.h"
 
@@ -32,7 +34,8 @@ public:
   QString configRoot;
   QString homeDir;
 
-  irc::Server *irc_server;
+  irc::Server *irc_server = nullptr;
+  WebServer *web_server = nullptr;
   SnakePit* snakepit = nullptr;
 
   mutable QReadWriteLock mtx_cache;
@@ -70,6 +73,7 @@ private slots:
   void onApplicationLog(const QString &msg);
 
 private:
+  QThread* m_web_thread = nullptr;
   QFileInfo m_path_db;
 
   static void createConfigDirectory(const QStringList &lst);

@@ -15,7 +15,8 @@ set(EXECUTABLE_FLAG)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network Gui Sql)
+find_package(Qt6 REQUIRED COMPONENTS Core Network Gui Sql HttpServer Concurrent)
+message(STATUS "Qt6 version: ${Qt6Core_VERSION}")
 
 find_package(Python3 3.13 REQUIRED COMPONENTS Interpreter Development)
 message(STATUS "Python3 version: ${Python3_VERSION}")
@@ -33,6 +34,10 @@ file(GLOB SOURCE_FILES
         "src/core/*.cpp"
         "src/python/*.h"
         "src/python/*.cpp"
+        "src/web/*.h"
+        "src/web/*.cpp"
+        "src/web/routes/*.h"
+        "src/web/routes/*.cpp"
         "src/lib/bcrypt/*.h"
         "src/lib/bcrypt/*.cpp"
         "assets.qrc"
@@ -64,6 +69,8 @@ target_link_libraries(qt_irc_server PRIVATE
         Qt6::Network
         Qt6::Gui
         Qt6::Sql
+        Qt6::HttpServer
+        Qt6::Concurrent
         Python3::Python
         logger_std
 )

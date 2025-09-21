@@ -16,7 +16,8 @@ Ctx::Ctx() {
 
   createConfigDirectory(QStringList({
     g::configDirectory,
-    g::pythonModulesDirectory
+    g::pythonModulesDirectory,
+    g::uploadsDirectory
   }));
 
   createDefaultFiles();
@@ -47,6 +48,32 @@ Ctx::Ctx() {
 
   SQL::account_get_all();  // trigger cache insertion
   CLOCK_MEASURE_END(start_init_db_preload, "initial db load");
+
+  // web server
+  m_web_thread = new QThread();
+  web_server = new WebServer();
+  web_server->setHost("0.0.0.0");
+  web_server->setPort(3000);
+  web_server->moveToThread(m_web_thread);
+
+  connect(m_web_thread, &QThread::started, web_server, [this]() {
+    if (!web_server->start()) {
+      qWarning() << "Failed to start server";
+      QCoreApplication::quit();
+    } else {
+      qInfo() << "Webserver started";
+    }
+  });
+
+  connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, [this] {
+    web_server->stop();
+    m_web_thread->quit();
+    m_web_thread->wait();
+    web_server->deleteLater();
+    m_web_thread->deleteLater();
+  });
+
+  m_web_thread->start();
 
   // Python
   snakepit = new SnakePit(this);
