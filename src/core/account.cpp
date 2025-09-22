@@ -208,14 +208,14 @@ void Account::broadcast_nick_changed(const QByteArray& msg) const {
 }
 
 void Account::add_connection(irc::client_connection *ptr) {
-  connect(ptr, &irc::client_connection::disconnected, [=] {
+  connect(ptr, &irc::client_connection::disconnected, [=](const QByteArray& nick_to_delete) {
     QWriteLocker locker(&mtx_lock);
     connections.removeAll(ptr);
     locker.unlock();
 
     // when unregistered, we need to clean the global account roster
     if (!is_logged_in()) {
-      g::ctx->irc_nicks_remove_cache(nick());
+      g::ctx->irc_nicks_remove_cache(nick_to_delete);
 
       const auto self = get_by_uid(uid());
       if (self.isNull())
@@ -223,11 +223,6 @@ void Account::add_connection(irc::client_connection *ptr) {
 
       g::ctx->account_remove_cache(self);
     }
-  });
-
-  connect(ptr, &QObject::destroyed, this, [this, ptr] {
-    QWriteLocker locker(&mtx_lock);
-    connections.removeAll(ptr);
   });
 
   connections << ptr;

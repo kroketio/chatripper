@@ -87,7 +87,7 @@ namespace irc {
     QByteArray prefix() const;
 
   signals:
-    void disconnected();
+    void disconnected(const QByteArray &nick_to_delete);
 
   private slots:
     void onReadyRead();

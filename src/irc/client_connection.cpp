@@ -765,7 +765,7 @@ namespace irc {
     //   m_server->removeChannelIfEmpty(ch);
     // }
 
-    emit disconnected();
+    emit disconnected(nick);
   }
 
   void client_connection::try_finalize_setup() {
