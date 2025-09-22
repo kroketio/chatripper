@@ -2,7 +2,7 @@ import sys
 import re
 import inspect
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, IntFlag
 from functools import wraps
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -10,15 +10,15 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Callable, Set
 
 class QIRCModuleType(Enum):
-    MODULE = 0
-    BOT = 1
+    MODULE =      1 << 0
+    BOT =         1 << 1
 
-class QIRCEvent(Enum):
-    AUTH_USER = 0
-    CHANNEL_MSG = 1
-    PRIVATE_MSG = 2
-    JOIN = 3
-    LEAVE = 4
+class QIRCEvent(IntFlag):
+    AUTH_SASL_PLAIN     = 1 << 0
+    CHANNEL_MSG         = 1 << 1
+    PRIVATE_MSG         = 1 << 2
+    JOIN                = 1 << 3
+    LEAVE               = 1 << 4
 
 class QIRCModule:
     """
@@ -122,7 +122,7 @@ class QIRCModule:
             if event is not None:
                 handlers.append({
                     "method": name,
-                    "event": str(event),
+                    "event": event,
                 })
         return handlers
 
@@ -171,8 +171,8 @@ class Message:
 
 @dataclass
 class AuthUserResult:
-    result: bool
-    reason: str  = None
+    result: bool = False
+    reason: bytes = None
 
 @dataclass
 class Channel:
@@ -208,55 +208,53 @@ class QIRC:
     _modules = {}
 
     def call(self, event: QIRCEvent, *args, **kwargs):
-        ev_enum = QIRCEvent(event)
-        # print("event", ev_enum)
-        # print("args", args)
-        # print("kwargs", kwargs)
-
-        if ev_enum not in self._handlers or not self._handlers[ev_enum]:
+        handlers = self._handlers.get(event)
+        if not handlers:
             print(f"Error: No handler for event {event}", file=sys.stderr)
             return None
 
-        if ev_enum is QIRCEvent.CHANNEL_MSG:
+        if event is QIRCEvent.CHANNEL_MSG:
             chan_data, account_data, text = args
             chan = Channel(**chan_data)
             account = Account(**account_data)
             message = Message(id=b"\x00", text=text)
-            print(message)
             args = (chan, account, message)
 
-        result = args[0] if args else None
-        for handler in self._handlers[ev_enum]:
-            result = handler(result, *args, **kwargs)
+        result = None
+        for instance, func in handlers:
+            if instance is None:
+                continue  # skip unbound handlers
+            bound_handler = func.__get__(instance)
+            result = bound_handler(*args, **kwargs)
         return result
 
     @classmethod
     def on(cls, event: QIRCEvent):
         """Decorator to register an event handler."""
         def decorator(func):
-            cls._handlers.setdefault(event, []).append(func)
-
             @wraps(func)
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
 
-            # mark wrapper with event info for introspection
+            # mark wrapper for introspection
             wrapper._qirc_event = event
             wrapper._qirc_handler = True
             wrapper._qirc_original = func
 
+            cls._handlers.setdefault(event, []).append((None, wrapper))
             return wrapper
         return decorator
 
-    # --- module management ---
+    def register_module(self, module: "QIRCModule"):
+        self._modules[module.__class__.__name__] = module
 
-    @classmethod
-    def register_module(cls, module):
-        """Register a module instance."""
-        if module.name in cls._modules:
-            raise ValueError(f"Module '{module.name}' is already registered.")
-        cls._modules[module.name] = module
-        return module
+        for event, handlers in self._handlers.items():
+            new_handlers = []
+            for instance, func in handlers:
+                if func.__qualname__.startswith(module.__class__.__name__ + "."):
+                    instance = module
+                new_handlers.append((instance, func))
+            self._handlers[event] = new_handlers
 
     @classmethod
     def list_modules(cls) -> dict:

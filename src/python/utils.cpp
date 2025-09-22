@@ -185,8 +185,8 @@ QAuthUserResult PyDataclassToQAuthUserResult(PyObject *obj) {
     r.result = PyObject_IsTrue(res);
 
   PyObject *reason = PyDict_GetItemString(dict, "reason");
-  if (reason && PyUnicode_Check(reason))
-    r.reason = QString::fromUtf8(PyUnicode_AsUTF8(reason));
+  if (reason && PyBytes_Check(reason))
+    r.reason = QByteArray(PyBytes_AsString(reason), PyBytes_Size(reason));
 
   Py_XDECREF(dict);
   return r;

@@ -21,15 +21,29 @@ void Account::setRandomUID() {
   m_uid = uuid.toRfc4122();
 }
 
-bool Account::verifyPassword(const QByteArray &candidate) const {
+QAuthUserResult Account::verifyPassword(const QByteArray &password_candidate, const QHostAddress& ip) const {
+  QAuthUserResult rtn;
   QReadLocker locker(&mtx_lock);
 
-  if (candidate.isEmpty() || m_password.isEmpty())
-    return false;
+  if (password_candidate.isEmpty() || m_password.isEmpty()) {
+    rtn.reason = "password cannot be empty";
+    return rtn;
+  }
 
-  const std::string candidateStr = candidate.toStdString();
+  if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
+    const auto res = g::ctx->snakepit->event(QIRCEvent::AUTH_SASL_PLAIN, m_name, password_candidate, ip.toString().toUtf8());
+    if (res.canConvert<QAuthUserResult>())
+      return res.value<QAuthUserResult>();
+
+    rtn.reason = "application error";
+    return rtn;
+  }
+
+  const std::string candidateStr = password_candidate.toStdString();
   const std::string pw = m_password.toStdString();
-  return bcrypt::validatePassword(candidateStr, pw);
+  rtn.result = bcrypt::validatePassword(candidateStr, pw);
+  rtn.reason = rtn.result ? "" : "bad password";
+  return rtn;
 }
 
 QSharedPointer<Account> Account::create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation) {
@@ -88,7 +102,7 @@ QByteArray Account::nick() {
     return m_nick;
 
   for (const auto& conn: connections) {
-    return conn->nick;
+    return conn->nick;  // segfault here -> conn->disconnected() -> account.cpp g::ctx->irc_nicks_remove_cache(nick()); -> this
   }
 
   return {};

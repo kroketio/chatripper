@@ -6,41 +6,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-struct QMessage {
-  QByteArray id;
-  QMap<QString, QVariant> tags;
-  QByteArray nick;
-  QByteArray user;
-  QByteArray host;
-  QStringList targets;
-  QVariant account;
-  QByteArray text;
-  QByteArray raw;
-  bool from_server = false;
-};
-
-struct QAuthUserResult {
-  bool result = false;
-  QString reason;
-};
-
-enum class ModuleType {
-  MODULE,
-  BOT
-};
-
-enum class QIRCEvent {
-  AUTH_USER,
-  CHANNEL_MSG,
-  PRIVATE_MSG,
-  JOIN,
-  LEAVE
-};
-
-struct ModuleHandler {
-  QIRCEvent event;
-  QString method;
-};
+#include "core/qtypes.h"
 
 class ModuleClass final {
 public:
@@ -48,7 +14,7 @@ public:
   QString author;
   double version = 0.0;
   bool enabled = false;
-  ModuleType type = ModuleType::MODULE;
+  QModuleType type = QModuleType::MODULE;
   QList<ModuleHandler> handlers;
 
   ModuleClass() = default;

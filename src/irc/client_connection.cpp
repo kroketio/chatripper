@@ -832,7 +832,8 @@ namespace irc {
 
     const auto account = Account::get_by_name(username);
     if (!account.isNull()) {
-      if (account->verifyPassword(password)) {
+      const auto [result, reason] = account->verifyPassword(password, m_socket->peerAddress());
+      if (result) {
         account->merge(m_account);
         m_account = account;
 
@@ -842,7 +843,7 @@ namespace irc {
         return;
       }
 
-      reply_num(900, "SASL authentication failed");
+      reply_num(900, "SASL authentication failed: " + reason);
       m_socket->disconnectFromHost();
       return;
     }

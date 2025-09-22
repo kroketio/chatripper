@@ -55,10 +55,13 @@ private:
   QHash<QByteArray, QSharedPointer<ModuleClass>> m_modules;
 
   Flags<QIRCEvent> m_activeEvents;
+  void calcActiveEvents();
+
   mutable QReadWriteLock m_activeEventsLock;
 
   QVariant callFunctionList(const QString &funcName, const QVariantList &args);
 
+  unsigned int m_thread_count = 2;
   QVector<QThread*> m_threads;
   QVector<Snake*> m_snakes;
   int next_index = 0;

@@ -3,11 +3,10 @@
 #include <QMetaObject>
 
 SnakePit::SnakePit(QObject *parent) : QObject(parent), m_started_counter(0), next_index(0) {
-  constexpr int thread_count = 3;
-  m_threads.resize(thread_count);
-  m_snakes.resize(thread_count);
+  m_threads.resize(m_thread_count);
+  m_snakes.resize(m_thread_count);
 
-  for (int i = 0; i < thread_count; ++i) {
+  for (int i = 0; i < m_thread_count; ++i) {
     auto *thread = new QThread(this);
     const auto snake = new Snake();
     snake->setIndex(i);
@@ -35,8 +34,7 @@ void SnakePit::onSnakeStarted(bool ok) {
 
   m_started_counter++;
 
-  constexpr int thread_count = 3; // keep in sync with your constructor
-  if (m_started_counter == thread_count) {
+  if (m_started_counter == m_thread_count) {
     qDebug() << "all Python interpreters ready";
 
     if (!m_snakes.isEmpty()) {
@@ -108,24 +106,16 @@ void SnakePit::refreshModulesAll() {
 
 bool SnakePit::enableModule(const QString &name) {
   bool ok = true;
-  for (Snake *s : m_snakes)
+  for (const Snake *s : m_snakes)
     ok &= s->enableModule(name);
 
   QMutexLocker locker(&mtx_refresh);
 
-  if (m_modules.contains(name.toUtf8()))
-    m_modules[name.toUtf8()]->enabled = true;
+  const QByteArray key = name.toUtf8();
+  if (m_modules.contains(key))
+    m_modules[key]->enabled = true;
 
-  Flags<QIRCEvent> activeEvents;
-  for (const auto &mod : m_modules) {
-    if (!mod->enabled)
-      continue;
-
-    for (const auto &[event, method] : mod->handlers)
-      activeEvents.set(event);
-  }
-  m_activeEvents = activeEvents;
-
+  calcActiveEvents();
   return ok;
 }
 
@@ -136,20 +126,26 @@ bool SnakePit::disableModule(const QString &name) {
 
   QMutexLocker locker(&mtx_refresh);
 
-  if (m_modules.contains(name.toUtf8()))
-    m_modules[name.toUtf8()]->enabled = false;
+  const QByteArray key = name.toUtf8();
+  if (m_modules.contains(key))
+    m_modules[key]->enabled = false;
 
-  Flags<QIRCEvent> activeEvents;
-  for (const auto &mod : m_modules) {
-    if (!mod->enabled)
-      continue;
-    for (const auto &[event, method] : mod->handlers)
-      activeEvents.set(event);
-  }
-  m_activeEvents = activeEvents;
-
+  calcActiveEvents();
   return ok;
 }
+
+void SnakePit::calcActiveEvents() {
+  Flags<QIRCEvent> flags;
+  for (auto it = m_modules.constBegin(); it != m_modules.constEnd(); ++it) {
+    const auto &mod = it.value();
+    if (!mod->enabled)
+      continue;
+    for (const auto &[event, method]: mod->handlers)
+      flags.set(event);
+  }
+  m_activeEvents = flags;
+}
+
 
 QVariant SnakePit::callFunctionList(const QString &funcName, const QVariantList &args) {
   QMutexLocker locker(&mtx_snake);
@@ -172,7 +168,7 @@ QVariant SnakePit::callFunctionList(const QString &funcName, const QVariantList 
   return returnValue;
 }
 
-bool SnakePit::hasEventHandler(QIRCEvent event) const {
+bool SnakePit::hasEventHandler(const QIRCEvent event) const {
   QReadLocker locker(&m_activeEventsLock);
   return m_activeEvents.has(event);
 }

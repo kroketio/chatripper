@@ -11,6 +11,7 @@
 #include <QHash>
 
 #include "globals.h"
+#include "core/qtypes.h"
 #include "irc/client_connection.h"
 
 class Channel;
@@ -22,7 +23,7 @@ public:
   explicit Account(const QByteArray& account_name = "", QObject* parent = nullptr);
   static QSharedPointer<Account> create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation);
 
-  bool verifyPassword(const QByteArray &candidate) const;
+  QAuthUserResult verifyPassword(const QByteArray &password_candidate, const QHostAddress& ip) const;
 
   static QSharedPointer<Account> get_by_uid(const QByteArray &uid);
   static QSharedPointer<Account> get_by_name(const QByteArray &name);
