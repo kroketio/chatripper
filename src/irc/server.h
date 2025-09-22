@@ -36,17 +36,24 @@ namespace irc {
 
   private slots:
     void onDisconnectSlowClients();
+    void onDefaultIdleTimeout();
+    void onPingTimeout();
 
   protected:
     void incomingConnection(qintptr socketDescriptor) override;
 
-    private slots:
-      void onClientDisconnected();
+  private slots:
+    void onClientDisconnected();
 
   private:
     QByteArray m_password;
     QByteArray m_motd;
+
+    QTimer* m_pingTimer = nullptr;
+    unsigned int m_pingBatchIndex = 0;
+
     QTimer* m_disconnectSlowClientsTimer = nullptr;
+    QTimer* m_timeoutTimer = nullptr;
 
     unsigned int m_timeout_slow_clients = 3;
   };

@@ -21,7 +21,7 @@ namespace irc {
     m_available_modes_count = static_cast<unsigned int>(UserModes::COUNT);
     // m_host = socket->peerAddress().toString().toUtf8();
     m_host = g::defaultHost;
-    time_connection_established = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
+    m_time_connection_established = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
 
     setup_tasks.set(
         ConnectionSetupTasks::CAP_EXCHANGE,
@@ -31,9 +31,6 @@ namespace irc {
 
     connect(m_socket, &QTcpSocket::readyRead, this, &client_connection::onReadyRead);
     connect(m_socket, &QTcpSocket::disconnected, this, &client_connection::onSocketDisconnected);
-    m_pingTimer.setInterval(30000);
-    connect(&m_pingTimer, &QTimer::timeout, this, &client_connection::onPingTimeout);
-    m_pingTimer.start();
   }
 
   void client_connection::handleCAP(const QList<QByteArray> &args) {
@@ -873,13 +870,16 @@ namespace irc {
       reply_num(409, "No origin specified");
       return;
     }
+
+    m_last_activity = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
+
     const QByteArray& token = args.last();
     const QByteArray out = "PONG " + m_server->serverName() + " :" + token + "\r\n";
     m_socket->write(out);
   }
 
   void client_connection::handlePONG(const QList<QByteArray> &) {
-    // noop; could update keepalive
+    m_last_activity = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
   }
 
   QList<QByteArray> client_connection::split_irc(const QByteArray &line) {
@@ -907,18 +907,6 @@ namespace irc {
     if (!trailing.isEmpty())
       out << trailing;
     return out;
-  }
-
-  void client_connection::onPingTimeout() {
-    if (!setup_tasks.empty()) {
-      m_socket->disconnectFromHost();
-      return;
-    }
-
-    // Send PING; expect client to PONG to keep alive
-    const QByteArray token = QByteArray::number(QDateTime::currentMSecsSinceEpoch());
-    const QByteArray out = "PING :" + token + "\r\n";
-    m_socket->write(out);
   }
 
   QByteArray client_connection::irc_lower(const QByteArray &s) {
@@ -981,6 +969,8 @@ namespace irc {
       return;
       reply_num(421, "Unknown command");
     }
+
+    m_last_activity = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
   }
 
   client_connection::~client_connection() {

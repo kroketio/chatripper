@@ -41,7 +41,11 @@ namespace irc {
 
     QTcpSocket *m_socket;
     bool logged_in = false;
-    time_t time_connection_established;  // used to kick misbehaving clients that are too slow to go through the setup/register process
+
+    // disconnect slow setup/register
+    time_t time_connection_established() const { return m_time_connection_established; }
+    // disconnect slow activity
+    time_t time_last_activity() const { return m_last_activity; }
 
     QByteArray nick;
     QByteArray user;
@@ -88,7 +92,6 @@ namespace irc {
   private slots:
     void onReadyRead();
     void onSocketDisconnected();
-    void onPingTimeout();
 
   private:
     void parseIncoming(const QByteArray &line);
@@ -125,8 +128,9 @@ namespace irc {
     QByteArray m_buffer;
     QByteArray m_passGiven;
     QByteArray m_host;
-    QTimer m_pingTimer;
-    qint64 m_lastActivityMs = 0;
+
+    time_t m_last_activity = 0;
+    time_t m_time_connection_established = 0;
 
     unsigned int m_available_modes_count;
   };

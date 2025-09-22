@@ -16,6 +16,7 @@ struct ConfigDirective {
 static const QHash<ConfigKeys::ConfigKey, ConfigDirective> configStrings = {
     {ConfigKeys::Test, {QS("Test"), "test"}},
     {ConfigKeys::CacheDir, {QS("CacheDir"), ""}},
+    {ConfigKeys::DefaultIdleTimeout, {QS("DefaultIdleTimeout"), 40}},
 };
 
 QPointer<Config> Config::m_instance(nullptr);

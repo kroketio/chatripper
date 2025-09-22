@@ -12,7 +12,8 @@ namespace ConfigKeys {
 
   enum ConfigKey {
     Test,
-    CacheDir
+    CacheDir,
+    DefaultIdleTimeout
   };
 
   Q_ENUM_NS(ConfigKey)
