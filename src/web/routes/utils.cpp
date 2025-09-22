@@ -30,3 +30,16 @@ QString tokenFromRequest(const QHttpServerRequest &req) {
   }
   return {};
 }
+
+QString tokenFromCookies(const QStringList &cookies) {
+  if (cookies.isEmpty())
+    return {};
+
+  const QList<QByteArray> parts = cookies.first().toUtf8().split(';');
+  for (const auto &p : parts) {
+    const auto pair = QString::fromUtf8(p).split('=', Qt::SkipEmptyParts);
+    if (pair.size() == 2 && pair.at(0).trimmed() == "session")
+      return pair.at(1).trimmed();
+  }
+  return {};
+}

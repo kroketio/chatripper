@@ -16,19 +16,29 @@
 #include <QUuid>
 
 #include "web/routes/utils.h"
-
 #include "ctx.h"
 
-// https://github.com/progval/ircv3-specifications/blob/filehost/extensions/filehost.md
+// https://codeberg.org/emersion/soju/src/branch/master/doc/ext/filehost.md
+// warning: you should reverse proxy this with a webserver (e.g. nginx), and enforce a max
+// upload size there. This will load into memory whatever the user sends.
 
 constexpr qint64 MAX_UPLOAD_SIZE = 5 * 1024 * 1024;
+
+static const QStringList kAcceptedTypes = {
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "video/mp4",
+  "video/webm",
+  "text/plain"
+};
 
 namespace UploadRoute {
 
 // sanitize filenames
 static QString safeFileName(const QString &filename) {
   QString base = QFileInfo(filename).fileName(); // strip directories
-  QRegularExpression validName("^[A-Za-z0-9._-]+$");
+  const QRegularExpression validName("^[A-Za-z0-9._-]+$");
   if (!validName.match(base).hasMatch()) {
     // fallback to UUID
     base = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -37,19 +47,31 @@ static QString safeFileName(const QString &filename) {
 }
 
 void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) {
+  // OPTIONS /api/1/file/upload
+  server->route("/api/1/file/upload", QHttpServerRequest::Method::Options, [](const QHttpServerRequest &) {
+    QHttpHeaders headers;
+    headers.append("Allow", "OPTIONS, POST");
+    headers.append("Accept-Post", kAcceptedTypes.join(", "));
+    QHttpServerResponse res(QHttpServerResponder::StatusCode::NoContent);
+    res.setHeaders(std::move(headers));
+    return res;
+  });
+
   // POST /api/1/file/upload
-  // warning: you should reverse proxy this with a webserver (e.g. nginx), and enforce a max
-  // upload size there. This will load into memory whatever the user sends.
   server->route("/api/1/file/upload", QHttpServerRequest::Method::Post, [sessions, limiter](const QHttpServerRequest &request) {
     const QByteArray body = request.body();
+    const QHostAddress ip = ipFromRequest(request);
 
+    // copy cookies
     QStringList cookieHeaders;
     for (const auto &c : request.headers().values("Cookie"))
       cookieHeaders << QString::fromUtf8(c);
 
-    const QHostAddress ip = ipFromRequest(request);
+    // copy headers
+    const QString contentType = QString::fromUtf8(request.headers().value("Content-Type"));
+    const QString contentDisposition = QString::fromUtf8(request.headers().value("Content-Disposition"));
 
-    QFuture<QHttpServerResponse> future = QtConcurrent::run([body, limiter, ip, cookieHeaders, sessions]() {
+    QFuture<QHttpServerResponse> future = QtConcurrent::run([body, limiter, ip, cookieHeaders, sessions, contentType, contentDisposition]() {
       // rate limit by IP
       if (auto [allowed, retryAfter] = limiter->check(ip); !allowed) {
         const qint64 seconds = QDateTime::currentDateTimeUtc().secsTo(retryAfter);
@@ -57,26 +79,38 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
         return QHttpServerResponse(msg, QHttpServerResponder::StatusCode::TooManyRequests);
       }
 
+      // @TODO: auth
+      // const QString token = tokenFromCookies(cookieHeaders);
+      // if (token.isEmpty() || !sessions->validateToken(token))
+      //   return QHttpServerResponse("Unauthorized", QHttpServerResponder::StatusCode::Unauthorized);
+
       if (body.size() > MAX_UPLOAD_SIZE)
         return QHttpServerResponse("File too large", QHttpServerResponder::StatusCode::PayloadTooLarge);
 
-      // const QString token = tokenFromCookies(cookieHeaders);
-      // if (token.isEmpty() || !sessions->validateToken(token)) {
-      //   return QHttpServerResponse("Unauthorized",
-      //                              QHttpServerResponder::StatusCode::Unauthorized);
-      // }
+      if (contentType.startsWith("multipart/form-data"))
+        return QHttpServerResponse("Unsupported upload type multipart/form-data", QHttpServerResponder::StatusCode::UnsupportedMediaType);
+
+      if (!kAcceptedTypes.contains(contentType))
+        return QHttpServerResponse("Unsupported media type", QHttpServerResponder::StatusCode::UnsupportedMediaType);
 
       if (body.isEmpty())
         return QHttpServerResponse("empty body", QHttpServerResponder::StatusCode::BadRequest);
 
-      // safe filename
-      const QString filename = safeFileName(QString::fromUtf8(QUuid::createUuid().toString().toUtf8()));
+      // extract filename
+      QString filename;
+      if (!contentDisposition.isEmpty() && contentDisposition.contains("filename=")) {
+        filename = contentDisposition.section("filename=", 1).trimmed();
+        filename.remove('"');
+        filename = safeFileName(filename);
+      } else {
+        filename = safeFileName(QUuid::createUuid().toString(QUuid::WithoutBraces));
+      }
+
       const QString filePath = g::uploadsDirectory + "/" + filename;
 
       QFile file(filePath);
-      if (!file.open(QIODevice::WriteOnly)) {
+      if (!file.open(QIODevice::WriteOnly))
         return QHttpServerResponse("failed to write file", QHttpServerResponder::StatusCode::InternalServerError);
-      }
 
       file.write(body);
       file.flush();
@@ -89,7 +123,7 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
       const QByteArray json = QJsonDocument(bodyJson).toJson();
 
       QHttpHeaders headers;
-      headers.insert(0, "Location", fileUrl);
+      headers.append("Location", fileUrl);
       QHttpServerResponse res("application/json", json, QHttpServerResponder::StatusCode::Created);
       res.setHeaders(std::move(headers));
       return res;
@@ -98,8 +132,8 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
     return future;
   });
 
-  // GET /files/<arg> - serve uploaded files
-  server->route("/files/<arg>", [](QString arg) {
+  // GET /files/<arg> - serve uploaded file
+  server->route("/files/<arg>", QHttpServerRequest::Method::Get, [](QString arg) {
     QFuture<QHttpServerResponse> future = QtConcurrent::run([arg]() {
       const QString safeFile = QFileInfo(arg).fileName();
       const QRegularExpression validName("^[A-Za-z0-9._-]+$");
@@ -112,6 +146,26 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
         return QHttpServerResponse("Not Found", QHttpServerResponder::StatusCode::NotFound);
 
       return QHttpServerResponse::fromFile(filePath);
+    });
+
+    return future;
+  });
+
+  // HEAD /files/<arg> - describe uploaded file
+  server->route("/files/<arg>", QHttpServerRequest::Method::Head, [](QString arg) {
+    QFuture<QHttpServerResponse> future = QtConcurrent::run([arg]() {
+      const QString safeFile = QFileInfo(arg).fileName();
+      const QString filePath = g::uploadsDirectory + "/" + safeFile;
+
+      if (!QFile::exists(filePath))
+        return QHttpServerResponse("Not Found", QHttpServerResponder::StatusCode::NotFound);
+
+      const QFileInfo info(filePath);
+      QHttpHeaders headers;
+      headers.append("Content-Length", QString::number(info.size()));
+      QHttpServerResponse res(QHttpServerResponder::StatusCode::Ok);
+      res.setHeaders(std::move(headers));
+      return res;
     });
 
     return future;
