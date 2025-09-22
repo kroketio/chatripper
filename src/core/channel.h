@@ -25,7 +25,7 @@ public:
   void part(QSharedPointer<Account> &account, const QByteArray &message = "");
   void leave(const QByteArray &account_name);
 
-  void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QByteArray message);
+  void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QMessage> &message);
 
   void setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg = {});
 

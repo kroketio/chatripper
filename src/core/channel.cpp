@@ -172,12 +172,22 @@ QList<QByteArray> Channel::banList() const {
   return m_ban_masks.values();
 }
 
-void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QByteArray message) {
+void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QMessage> &message) {
   if (g::ctx->snakepit->hasEventHandler(QIRCEvent::CHANNEL_MSG)) {
-    auto res = g::ctx->snakepit->event(QIRCEvent::CHANNEL_MSG, this->to_variantmap(), from->to_variantmap(), message);
+    auto res = g::ctx->snakepit->event(QIRCEvent::CHANNEL_MSG, this->to_variantmap(), from->to_variantmap(), message->to_variantmap());
     if (res.canConvert<QMessage>()) {
       const auto new_msg = res.value<QMessage>();
-      message = new_msg.text;
+      // @TODO: we can do better
+      message->id = new_msg.id;
+      message->tags = new_msg.tags;
+      message->nick = new_msg.nick;
+      message->user = new_msg.user;
+      message->host = new_msg.host;
+      message->targets = new_msg.targets;
+      message->account = new_msg.account;
+      message->text = new_msg.text;
+      message->raw = new_msg.raw;
+      message->from_server = new_msg.from_server;
     }
   }
 

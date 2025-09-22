@@ -1,5 +1,8 @@
 #pragma once
 #include <QObject>
+#include <QByteArray>
+#include <QVector>
+#include <QMap>
 
 struct QMessage {
   QByteArray id;
@@ -12,6 +15,36 @@ struct QMessage {
   QByteArray text;
   QByteArray raw;
   bool from_server = false;
+
+  QVariantMap to_variantmap() const {
+    QVariantMap map;
+
+    map["id"] = id;
+
+    QVariantMap tagMap;
+    for (auto it = tags.constBegin(); it != tags.constEnd(); ++it) {
+      tagMap[it.key()] = it.value();
+    }
+    map["tags"] = tagMap;
+
+    map["nick"] = nick;
+    map["user"] = user;
+    map["host"] = host;
+
+    QVariantList targetList;
+    for (const auto& t : targets) {
+      targetList.append(t.toUtf8());
+    }
+    map["targets"] = targetList;
+
+    map["account"] = account;
+    map["text"] = QString::fromUtf8(text);
+    map["raw"] = raw;
+
+    map["from_server"] = from_server;
+
+    return map;
+  }
 };
 
 struct QAuthUserResult {

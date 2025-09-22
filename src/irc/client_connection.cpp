@@ -381,15 +381,15 @@ namespace irc {
 
   }
 
-  void client_connection::self_message(const QByteArray& target, const QByteArray &message) const {
+  void client_connection::self_message(const QByteArray& target, const QSharedPointer<QMessage> &message) const {
     if (capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE)) {
-      const QByteArray msg = ":" + prefix() + " PRIVMSG " + target + " :" + message + "\r\n";
+      const QByteArray msg = ":" + prefix() + " PRIVMSG " + target + " :" + message->text + "\r\n";
       m_socket->write(msg);
     }
   }
 
-  void client_connection::message(const QSharedPointer<Account> &src, const QByteArray& target, const QByteArray &message) const {
-    const QByteArray msg = ":" + src->prefix(0) + " PRIVMSG " + target + " :" + message + "\r\n";
+  void client_connection::message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QMessage> &message) const {
+    const QByteArray msg = ":" + src->prefix(0) + " PRIVMSG " + target + " :" + message->text + "\r\n";
     m_socket->write(msg);
   }
 
@@ -531,35 +531,33 @@ namespace irc {
     }
 
     const QByteArray target = args[0];
-    QByteArray text = args[1];
-    if (target.startsWith('#')) {  //  || target.startsWith('&') || target.startsWith('+') || target.startsWith('!')
+    const QByteArray text = args[1];
+
+    auto msg = QSharedPointer<QMessage>(new QMessage);
+    msg->account = m_account->uid();
+    msg->text = text;
+    msg->from_server = false;
+    msg->nick = nick;
+    msg->raw = args.join(" ");
+    msg->user = user;
+    msg->host = m_host;
+
+    if (target.startsWith('#')) {
       const auto chan_ptr = Channel::get(target.mid(1));
       if (chan_ptr.isNull()) {
         send_raw("401 " + nick + " " + target + " :No such nick/channel");
         return;
       }
 
-      chan_ptr->message(this, m_account, text);
+      chan_ptr->message(this, m_account, msg);
     } else {
       if (!g::ctx->irc_nicks.contains(target)) {
         send_raw("401 " + nick + " " + target + " :No such nick/channel");
         return;
       }
 
-      m_account->message(this, g::ctx->irc_nicks[target], text);
+      m_account->message(this, g::ctx->irc_nicks[target], msg);
     }
-
-    //
-    // } else {
-    //   // user message
-    //   auto *other = m_server->getClientByNick(target);
-    //   if (!other) {
-    //     sendRaw("401 " + nick + " " + target + " :No such nick");
-    //     return;
-    //   }
-    //   QByteArray line = ":" + prefix() + " PRIVMSG " + other->nickname() + " :" + text + "\r\n";
-    //   other->m_socket->write(line);
-    // }
   }
 
   void client_connection::handleQUIT(const QList<QByteArray> &args) {

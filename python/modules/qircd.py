@@ -1,3 +1,12 @@
+# ========================================================================
+# PRIVATE MODULE
+# ========================================================================
+# This file is considered an internal/private part of the QIRCd framework.
+# It is typically not intended for direct use in modules.
+#
+# Direct interaction with this file should generally only occur when
+# writing or testing QIRCd modules or extending the framework itself.
+# ========================================================================
 import sys
 import re
 import inspect
@@ -24,41 +33,9 @@ class QIRCModule:
     """
     Baseclass for modules.
 
-    Usage:
-        class TestModule(QIRCModule):
-            name = "TestModule"
-            version = 0.1
-            author = "Sander"
-            type = QIRCModuleType.MODULE
-
-            def __init__(self):
-                super().__init__()
-
-            def init(self):
-                print("module init code here")
-
-            def deinit(self):
-                print("module deinit code here")
-
-            @qirc.on(QIRCEvent.CHANNEL_MSG)
-            def some_handler(self, channel: Channel, acc: Account, msg: Message) -> Message:
-                msg.text = msg.text.upper()
-                return msg
-
-            @qirc.on(QIRCEvent.CHANNEL_MSG)
-            def another_handler(self, channel: Channel, acc: Account, msg: Message) -> Message:
-                msg.text = msg.text[::-1]
-                return msg
-
-    Attributes:
-        name (str): The name of the module.
-        version (float): Module version number.
-        author (str): Author of the module.
-        type (QIRCModuleType): The type/category of the module.
-
-    Methods:
-        init(): Called when the module is enabled.
-        deinit(): Called when the module is disabled.
+    Ensures that the necessary methods exist, as
+    well as providing some helper functions for
+    introspection
     """
     name: str = None
     version: float = None
@@ -163,7 +140,7 @@ class Message:
 
     account: Optional[Account] = None
 
-    text: bytes = ""
+    text: str = ""
     raw: Optional[bytes] = None
 
     # message originates from server (NOTICE, CTCP replies, etc.)
@@ -172,7 +149,7 @@ class Message:
 @dataclass
 class AuthUserResult:
     result: bool = False
-    reason: bytes = None
+    reason: str = None
 
 @dataclass
 class Channel:
@@ -208,16 +185,18 @@ class QIRC:
     _modules = {}
 
     def call(self, event: QIRCEvent, *args, **kwargs):
+        ev = QIRCEvent(event)
+
         handlers = self._handlers.get(event)
         if not handlers:
             print(f"Error: No handler for event {event}", file=sys.stderr)
             return None
 
-        if event is QIRCEvent.CHANNEL_MSG:
-            chan_data, account_data, text = args
+        if ev is QIRCEvent.CHANNEL_MSG:
+            chan_data, account_data, message = args
             chan = Channel(**chan_data)
             account = Account(**account_data)
-            message = Message(id=b"\x00", text=text)
+            message = Message(**message)
             args = (chan, account, message)
 
         result = None

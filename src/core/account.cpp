@@ -31,7 +31,12 @@ QAuthUserResult Account::verifyPassword(const QByteArray &password_candidate, co
   }
 
   if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
-    const auto res = g::ctx->snakepit->event(QIRCEvent::AUTH_SASL_PLAIN, m_name, password_candidate, ip.toString().toUtf8());
+    const auto res = g::ctx->snakepit->event(
+      QIRCEvent::AUTH_SASL_PLAIN,
+      QString::fromUtf8(m_name),
+      QString::fromUtf8(password_candidate),
+      ip.toString());
+
     if (res.canConvert<QAuthUserResult>())
       return res.value<QAuthUserResult>();
 
@@ -173,7 +178,7 @@ void Account::channel_join(QSharedPointer<Account> &acc, const QByteArray& chann
   ptr->join(acc);
 }
 
-void Account::channel_part(QSharedPointer<Account> &acc, const QByteArray& channel_name, const QByteArray& message) {
+void Account::channel_part(QSharedPointer<Account> &acc, const QByteArray& channel_name, const QByteArray &message) {
   if (!g::ctx->channels.contains(channel_name))
     return;
 
@@ -181,7 +186,7 @@ void Account::channel_part(QSharedPointer<Account> &acc, const QByteArray& chann
   ptr->part(acc, message);
 }
 
-void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, const QByteArray &message) {
+void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, QSharedPointer<QMessage> &message) {
   // @TODO: deal with history when we are offline
   QReadLocker locker(&mtx_lock);
 

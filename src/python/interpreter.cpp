@@ -85,7 +85,7 @@ void Snake::start() {
 #ifdef DEBUG
   const QString modulePath = "/home/dsc/CLionProjects/chat/server/python/modules";
 #else
-    const QString modulePath = g::pythonModulesDirectory;
+  const QString modulePath = g::pythonModulesDirectory;
 #endif
   PyRun_SimpleString(QString("import sys; sys.path.append('%1'); from qircd import __qirc_call").arg(modulePath).toUtf8().constData());
 

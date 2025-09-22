@@ -153,7 +153,7 @@ QMessage PyDataclassToQMessage(PyObject *obj) {
   m.nick        = getBytes("nick");
   m.user        = getBytes("user");
   m.host        = getBytes("host");
-  m.text        = getBytes("text");
+  m.text        = getStr("text").toUtf8();
   m.raw         = getBytes("raw");
   m.from_server = getBool("from_server");
 
@@ -185,8 +185,8 @@ QAuthUserResult PyDataclassToQAuthUserResult(PyObject *obj) {
     r.result = PyObject_IsTrue(res);
 
   PyObject *reason = PyDict_GetItemString(dict, "reason");
-  if (reason && PyBytes_Check(reason))
-    r.reason = QByteArray(PyBytes_AsString(reason), PyBytes_Size(reason));
+  if (reason && PyUnicode_Check(reason))
+    r.reason = PyUnicode_AsUTF8(reason);
 
   Py_XDECREF(dict);
   return r;
