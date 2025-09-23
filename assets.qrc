@@ -1,5 +1,0 @@
-<RCC>
-<qresource prefix="/">
-  <file alias="qircd.py">python/modules/qircd.py</file>
-</qresource>
-</RCC>

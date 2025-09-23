@@ -40,7 +40,7 @@ file(GLOB SOURCE_FILES
         "src/web/routes/*.cpp"
         "src/lib/bcrypt/*.h"
         "src/lib/bcrypt/*.cpp"
-        "assets.qrc"
+        "src/assets.qrc"
 )
 
 add_subdirectory(src/lib/logger_std)
