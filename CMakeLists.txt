@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(qt_irc_server LANGUAGES CXX)
+project(snakepit LANGUAGES CXX)
 
 option(ENABLE_DEBUG_TIMINGS "Write time measurements to /tmp/server.timings to debug performance." TRUE)
 
@@ -45,13 +45,13 @@ file(GLOB SOURCE_FILES
 
 add_subdirectory(src/lib/logger_std)
 
-add_executable(qt_irc_server
+add_executable(snakepit
     src/main.cpp
     ${SOURCE_FILES}
 )
 
 if(ENABLE_DEBUG_TIMINGS)
-    target_compile_definitions(qt_irc_server
+    target_compile_definitions(snakepit
         PUBLIC
         ENABLE_DEBUG_TIMINGS=1
     )
@@ -59,12 +59,12 @@ endif()
 
 if(DEBUG)
     message(STATUS "DEBUG BUILD")
-    target_compile_definitions(qt_irc_server PRIVATE DEBUG=1)
+    target_compile_definitions(snakepit PRIVATE DEBUG=1)
 endif()
 
-target_include_directories(qt_irc_server PRIVATE src src/lib)
+target_include_directories(snakepit PRIVATE src src/lib)
 
-target_link_libraries(qt_irc_server PRIVATE
+target_link_libraries(snakepit PRIVATE
         Qt6::Core
         Qt6::Network
         Qt6::Gui
