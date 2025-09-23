@@ -188,6 +188,8 @@ void Channel::message(const irc::client_connection *from_conn, const QSharedPoin
       message->text = new_msg.text;
       message->raw = new_msg.raw;
       message->from_server = new_msg.from_server;
+    } else {
+      return;
     }
   }
 

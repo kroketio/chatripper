@@ -13,7 +13,7 @@ SnakePit::SnakePit(QObject *parent) : QObject(parent), m_started_counter(0), nex
     snake->moveToThread(thread);
 
     // track started interpreters
-    connect(snake, &Snake::started, this, &SnakePit::onSnakeStarted, Qt::UniqueConnection);
+    connect(snake, &Snake::started, this, &SnakePit::onSnakesReady, Qt::UniqueConnection);
 
     connect(thread, &QThread::started, snake, &Snake::start);
     connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, thread, &QThread::quit);
@@ -27,39 +27,26 @@ SnakePit::SnakePit(QObject *parent) : QObject(parent), m_started_counter(0), nex
   }
 }
 
-void SnakePit::onSnakeStarted(bool ok) {
+void SnakePit::onSnakesReady(const bool ok) {
   if (!ok) {
     qWarning() << "snake thread failed to start!";
+    return;
   }
 
-  m_started_counter++;
+  if (++m_started_counter < m_thread_count)
+    return;
 
-  if (m_started_counter == m_thread_count) {
-    qDebug() << "all Python interpreters ready";
+  qDebug() << "all Python interpreters ready";
 
-    if (!m_snakes.isEmpty()) {
-      QHash<QByteArray, QSharedPointer<ModuleClass>> modules = m_snakes[0]->listModules();
-      Flags<QIRCEvent> activeEvents;
-
-      for (auto it = modules.constBegin(); it != modules.constEnd(); ++it) {
-        const auto &module = it.value();
-        if (!module->enabled)
-          continue;
-        for (const auto &[event, method] : module->handlers)
-          activeEvents.set(event);
-      }
-
-      QMutexLocker locker(&mtx_refresh);
-      m_modules = modules;
-      m_activeEvents = activeEvents;
-
-      emit modulesRefreshed(m_modules);
-    }
-
-    emit allSnakesStarted();
+  if (!m_snakes.isEmpty()) {
+    QMutexLocker locker(&mtx_refresh);
+    m_modules = m_snakes[0]->listModules();
+    calcActiveEvents();
+    emit modulesRefreshed(m_modules);
   }
+
+  emit allSnakesStarted();
 }
-
 
 void SnakePit::restart() {
   if (m_snakes.isEmpty())
@@ -83,23 +70,10 @@ void SnakePit::refreshModulesAll() {
     return;
 
   const QHash<QByteArray, QSharedPointer<ModuleClass>> modules = m_snakes[0]->listModules();
-  Flags<QIRCEvent> activeEvents;
 
-  for (auto it = modules.constBegin(); it != modules.constEnd(); ++it) {
-    const auto &module = it.value();
-
-    if (!module->enabled)
-      continue;
-
-    for (const auto &[event, method] : module->handlers)
-      activeEvents.set(event);
-  }
-
-  {
-    QMutexLocker locker(&mtx_refresh);
-    m_modules = modules;
-    m_activeEvents = activeEvents;
-  }
+  QMutexLocker locker(&mtx_refresh);
+  m_modules = modules;
+  calcActiveEvents();
 
   emit modulesRefreshed(m_modules);
 }
@@ -136,25 +110,39 @@ bool SnakePit::disableModule(const QString &name) {
 
 void SnakePit::calcActiveEvents() {
   Flags<QIRCEvent> flags;
+  Flags<QIRCEvent> flagsExclusive;
   for (auto it = m_modules.constBegin(); it != m_modules.constEnd(); ++it) {
     const auto &mod = it.value();
     if (!mod->enabled)
       continue;
-    for (const auto &[event, method]: mod->handlers)
+    for (const auto &[event, method]: mod->handlers) {
       flags.set(event);
+      if (mod->mode == QModuleMode::EXCLUSIVE)
+        flagsExclusive.set(event);
+    }
   }
-  m_activeEvents = flags;
-}
 
+  m_activeEvents = flags;
+  m_activeExclusiveEvents = flagsExclusive;
+}
 
 QVariant SnakePit::callFunctionList(const QString &funcName, const QVariantList &args) {
   QMutexLocker locker(&mtx_snake);
   if (m_snakes.isEmpty())
     return {};
 
-  const int idx = next_index;
-  next_index = (next_index + 1) % m_snakes.size();
-  Snake *target = m_snakes[idx];
+  const auto& ev = args.at(0);
+  Snake *target = nullptr;
+
+  if (ev.canConvert<QIRCEvent>())
+    if (const auto event = ev.value<QIRCEvent>(); m_activeExclusiveEvents.has(event))
+      target = m_snakes[0];  // event is exclusive to interpreter 0
+
+  if (target == nullptr) {
+    const int idx = next_index;
+    next_index = (next_index + 1) % static_cast<int>(m_snakes.size());
+    target = m_snakes[idx];
+  }
 
   QVariant returnValue;
   QMetaObject::invokeMethod(
@@ -179,10 +167,9 @@ Flags<QIRCEvent> SnakePit::activeEvents() const {
 }
 
 SnakePit::~SnakePit() {
-  for (QThread *t : m_threads) {
-    if (t && t->isRunning()) {
-      t->quit();
-      t->wait();
-    }
-  }
+  std::for_each(m_threads.begin(), m_threads.end(), [](QThread* t) {
+    if (!t || !t->isRunning()) return;
+    t->quit();
+    t->wait();
+  });
 }

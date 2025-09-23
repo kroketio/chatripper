@@ -9,6 +9,7 @@ QSharedPointer<ModuleClass> ModuleClass::create_from_json(const QJsonObject &obj
   module->version = obj.value("version").toDouble();
   module->enabled = obj.value("enabled").toBool();
   module->type = static_cast<QModuleType>(obj.value("type").toInt());
+  module->mode = static_cast<QModuleMode>(obj.value("mode").toInt());
 
   QJsonArray handlersArr = obj.value("handlers").toArray();
   for (const QJsonValue &v : handlersArr) {

@@ -22,6 +22,10 @@ class QIRCModuleType(Enum):
     MODULE =      1 << 0
     BOT =         1 << 1
 
+class QIRCModuleMode(Enum):
+    CONCURRENT =      1 << 0
+    EXCLUSIVE =       1 << 1
+
 class QIRCEvent(IntFlag):
     AUTH_SASL_PLAIN     = 1 << 0
     CHANNEL_MSG         = 1 << 1
@@ -37,30 +41,23 @@ class QIRCModule:
     well as providing some helper functions for
     introspection
     """
-    name: str = None
     version: float = None
     author: str = None
-    type: QIRCModuleType = None
+    type: QIRCModuleType = QIRCModuleType.MODULE
+    mode: QIRCModuleMode = QIRCModuleMode.CONCURRENT
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
 
         # enforce required metadata
         missing_meta = []
-        for attr in ["name", "version", "author", "type"]:
+        for attr in ["type", "mode"]:
             if getattr(cls, attr, None) is None:
                 missing_meta.append(attr)
         if missing_meta:
             raise NotImplementedError(
                 f"Subclass {cls.__name__} must define metadata: {', '.join(missing_meta)}"
             )
-
-        # enforce lifecycle methods
-        for method in ["init", "deinit"]:
-            if not callable(getattr(cls, method, None)):
-                raise NotImplementedError(
-                    f"Subclass {cls.__name__} must implement: {method}()"
-                )
 
     def __init__(self):
         self._enabled: bool = False
@@ -69,12 +66,14 @@ class QIRCModule:
     def enable(self):
         if not self._enabled:
             self._enabled = True
-            self.init()
+            if getattr(self, 'init'):
+                self.init()
 
     def disable(self):
         if self._enabled:
             self._enabled = False
-            self.deinit()
+            if getattr(self, 'deinit'):
+                self.deinit()
 
     @property
     def enabled(self) -> bool:
@@ -83,10 +82,11 @@ class QIRCModule:
     # introspection
     def describe(self) -> dict:
         return {
-            "name": self.name,
+            "name": self.__class__.__name__,
             "version": self.version,
             "author": self.author,
-            "type": self.type.name if isinstance(self.type, Enum) else self.type,
+            "type": self.type.value,
+            "mode": self.mode.value,
             "enabled": self.enabled,
             "handlers": self._get_event_handlers(),
         }
@@ -205,6 +205,9 @@ class QIRC:
                 continue  # skip unbound handlers
             bound_handler = func.__get__(instance)
             result = bound_handler(*args, **kwargs)
+            if result is None:
+                print("returning None")
+                return result
         return result
 
     @classmethod

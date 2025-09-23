@@ -57,6 +57,11 @@ enum class QModuleType : int {
   BOT         = 1 << 1
 };
 
+enum class QModuleMode : int {
+  CONCURRENT =      1 << 0,
+  EXCLUSIVE  =      1 << 1
+};
+
 enum class QIRCEvent : int {
   AUTH_SASL_PLAIN =     1 << 0,
   CHANNEL_MSG         = 1 << 1,

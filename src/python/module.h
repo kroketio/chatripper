@@ -15,6 +15,7 @@ public:
   double version = 0.0;
   bool enabled = false;
   QModuleType type = QModuleType::MODULE;
+  QModuleMode mode = QModuleMode::CONCURRENT;
   QList<ModuleHandler> handlers;
 
   ModuleClass() = default;

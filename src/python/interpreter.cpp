@@ -83,7 +83,7 @@ void Snake::start() {
   PyDict_SetItemString(main_dict, "snake", pyModule);
 
 #ifdef DEBUG
-  const QString modulePath = "/home/dsc/CLionProjects/chat/server/python/modules";
+  const QString modulePath = "/home/dsc/CLionProjects/chat/server/data/scripts/";
 #else
   const QString modulePath = g::pythonModulesDirectory;
 #endif

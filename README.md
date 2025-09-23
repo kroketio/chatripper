@@ -26,18 +26,22 @@ Work in progress.
 
 ## Server-side scripting
 
-Change messages on-the-fly, modify/add IRCv3 message tags in transit, and more.
+Change messages on-the-fly, modify/add IRCv3 message tags, and more.
 
 ```python3
-@qirc.on(QIRCEvent.CHANNEL_MSG)
-def channel_message_handler(self, channel: Channel, acc: Account, msg: Message) -> Message:
-  if acc.username == "sander":
-    # messages from `sander` are always uppercase now
-    msg.text = msg.text.upper()
+class MyModule(QIRCModule):
+  def __init__(self):
+    super().__init__()
 
-  # all channel messages get this tag attached
-  msg.tags["example-tag"] = "example-value"
-  return msg
+  @qirc.on(QIRCEvent.CHANNEL_MSG)
+  def channel_message_handler(self, channel: Channel, acc: Account, msg: Message) -> Message:
+    if acc.username == "sander":
+      # messages from `sander` are always uppercase now
+      msg.text = msg.text.upper()
+
+    # all channel messages get this tag attached
+    msg.tags["example-tag"] = "example-value"
+    return msg
 ```
 
 `Channel` and `Account` objects are available for any additional logic.
