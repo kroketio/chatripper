@@ -49,3 +49,18 @@ More info [docs/modules.md](docs/modules.md)
 - Platform(s) supported: Linux x86/64
 - Dependencies: Qt6, Python >= 3.13
 - Build dependencies: CMake, C++17
+
+## Testimonials
+
+> &lt;user1&gt; What problem does this solve? 
+
+> &lt;user2&gt; Lua would be a better choice for a scripting engine than Python
+
+> &lt;user3&gt; you can finish the IRC server in Hell with all the other C++ programmers  
+> &lt;user3&gt; and Python programmers  
+> &lt;user3&gt; us Perl/Go programmers are going to heaven
+
+> &lt;user4&gt; What is your elevator pitch?
+ 
+> &lt;user5&gt; Qt is bloated  
+> &lt;user5&gt; what if I want to run this on ARM?
