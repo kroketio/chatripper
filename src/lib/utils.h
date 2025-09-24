@@ -39,6 +39,8 @@ public:
   static std::chrono::time_point<std::chrono::high_resolution_clock> timeStart();
   static void timeEnd(const std::string &label, std::chrono::time_point<std::chrono::high_resolution_clock> start);
 
+  static QString uuidBytesToString(const QByteArray &uuidBytes);
+
   static unsigned int getCpuCount()
   {
     int cpuCount = 1;

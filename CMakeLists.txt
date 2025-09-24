@@ -15,6 +15,8 @@ set(EXECUTABLE_FLAG)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+find_package(RapidJSON REQUIRED)
+
 find_package(Qt6 REQUIRED COMPONENTS Core Network Gui Sql HttpServer Concurrent)
 message(STATUS "Qt6 version: ${Qt6Core_VERSION}")
 
@@ -62,7 +64,10 @@ if(DEBUG)
     target_compile_definitions(snakepit PRIVATE DEBUG=1)
 endif()
 
-target_include_directories(snakepit PRIVATE src src/lib)
+target_include_directories(snakepit PRIVATE
+        src
+        src/lib
+        ${RapidJSON_INCLUDE_DIRS})
 
 target_link_libraries(snakepit PRIVATE
         Qt6::Core

@@ -6,9 +6,14 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
+#include "utils.h"
 #include "core/account.h"
 #include "irc/client_connection.h"
 #include "irc/modes.h"
+
+#include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
 
 class Account;
 
@@ -17,7 +22,7 @@ class Channel final : public QObject {
 
 public:
   explicit Channel(const QByteArray &name, QObject *parent = nullptr);
-  static QSharedPointer<Channel> create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &topic, const QByteArray &ownerId, const QDateTime &creation);
+  static QSharedPointer<Channel> create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &topic, const QSharedPointer<Account> &owner, const QDateTime &creation);
 
   [[nodiscard]] bool has(const QByteArray &account_name) const;
   void join(const QByteArray &account_name);
@@ -45,9 +50,7 @@ public:
   void setKey(const QByteArray &k);
 
   [[nodiscard]] QSharedPointer<Account> accountOwner() const;
-
-  [[nodiscard]] QByteArray accountOwnerId() const { return m_account_owner_id; }
-  void setAccountOwnerId(const QByteArray &uuidv4);
+  void setAccountOwner(const QSharedPointer<Account> &owner);
 
   Flags<irc::ChannelModes> channel_modes;
 
@@ -57,12 +60,12 @@ public:
   int limit() const { return m_limit; }
 
   QByteArray uid;
+  QByteArray uid_str;
   QDateTime date_creation;
 
 signals:
   void topicChanged(const QByteArray &newTopic);
   void keyChanged(const QByteArray &newKey);
-  void accountOwnerIdChanged(const QByteArray &account_owner_id);
 
   void memberJoined(const QSharedPointer<Account> &account);
   void memberJoinedFailed(const QSharedPointer<Account> &account);
@@ -75,7 +78,7 @@ private:
   QByteArray m_name;
   QByteArray m_topic;
   QByteArray m_key;
-  QByteArray m_account_owner_id;
+  QSharedPointer<Account> m_owner;
   QList<QSharedPointer<Account>> m_members;
 
   // bans
@@ -90,7 +93,7 @@ public:
     obj["name"] = QString::fromUtf8(m_name);
     obj["topic"] = QString::fromUtf8(m_topic);
     obj["key"] = QString::fromUtf8(m_key);
-    obj["account_owner_id"] = QString::fromUtf8(m_account_owner_id);
+    obj["owner"] = m_owner.isNull() ? QVariant() : QString::fromUtf8(m_owner->uid());
     obj["limit"] = m_limit;
     obj["date_creation"] = date_creation.toString(Qt::ISODate);
 
@@ -122,4 +125,49 @@ public:
     return obj;
   }
 
+  rapidjson::Value to_rapidjson(rapidjson::Document::AllocatorType& allocator) {
+    rapidjson::Value obj(rapidjson::kObjectType);
+
+    // strings
+    obj.AddMember("uid", rapidjson::Value(uid_str.constData(), allocator), allocator);
+    obj.AddMember("name", rapidjson::Value(m_name.constData(), allocator), allocator);
+    obj.AddMember("topic", rapidjson::Value(m_topic.constData(), allocator), allocator);
+    obj.AddMember("key", rapidjson::Value(m_key.constData(), allocator), allocator);
+    obj.AddMember("owner", m_owner.isNull() ?
+      rapidjson::Value() :
+      rapidjson::Value(m_owner->uid_str().constData(), allocator), allocator);
+
+    // integers
+    obj.AddMember("limit", m_limit, allocator);
+
+    // date as string
+    obj.AddMember("date_creation", rapidjson::Value(date_creation.toString(Qt::ISODate).toUtf8().constData(), allocator), allocator);
+
+    // members array
+    rapidjson::Value membersArray(rapidjson::kArrayType);
+    for (const auto &member : m_members) {
+      if (member) {
+        membersArray.PushBack(rapidjson::Value(member->uid_str().constData(), allocator), allocator);
+      }
+    }
+    obj.AddMember("members", membersArray, allocator);
+
+    // ban masks array
+    rapidjson::Value bansArray(rapidjson::kArrayType);
+    for (const auto &mask : m_ban_masks) {
+      bansArray.PushBack(rapidjson::Value(mask, allocator), allocator);
+    }
+    obj.AddMember("ban_masks", bansArray, allocator);
+
+    // channel modes as string
+    QString modeLetters;
+    for (auto it = irc::channelModesLookup.begin(); it != irc::channelModesLookup.end(); ++it) {
+      if (channel_modes.has(it.key())) {
+        modeLetters += it.value().letter;
+      }
+    }
+    obj.AddMember("modes", rapidjson::Value(modeLetters.toUtf8().constData(), allocator), allocator);
+
+    return obj;
+  }
 };

@@ -39,7 +39,7 @@ public:
   static QList<QSharedPointer<Channel>> account_get_channels(const QByteArray &account_id);
 
   // channel
-  static QSharedPointer<Channel> channel_get_or_create(const QByteArray &name, const QByteArray &topic, const QByteArray &account_owner_id);
+  static QSharedPointer<Channel> channel_get_or_create(const QByteArray &name, const QByteArray &topic, const QSharedPointer<Account> &owner);
   static bool channel_exists(const QByteArray &name);
   static QList<QSharedPointer<Channel>> channel_get_all();
   static bool channel_add_member(const QByteArray &account_id, const QByteArray &channel_id);

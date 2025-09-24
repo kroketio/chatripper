@@ -14,7 +14,7 @@ bool Channel::has(const QByteArray &username) const {
   return true;
 }
 
-QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &topic, const QByteArray &ownerId, const QDateTime &creation) {
+QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &topic, const QSharedPointer<Account> &owner, const QDateTime &creation) {
   auto const ctx = Ctx::instance();
   const auto it = ctx->channels.find(name);
   if (it != ctx->channels.end())
@@ -22,8 +22,10 @@ QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByt
 
   QSharedPointer<Channel> channel = QSharedPointer<Channel>::create(name);
   channel->uid = id;
+  channel->uid_str = Utils::uuidBytesToString(id).toUtf8();
   channel->setName(name);
-  channel->setAccountOwnerId(ownerId);
+  if (!owner.isNull())
+    channel->setAccountOwner(owner);
   channel->setTopic(topic);
   channel->date_creation = creation;
 
@@ -88,11 +90,6 @@ void Channel::setTopic(const QByteArray &t) {
   }
 }
 
-void Channel::setAccountOwnerId(const QByteArray &uuidv4) {
-  m_account_owner_id = uuidv4;
-  emit accountOwnerIdChanged(uuidv4);
-}
-
 void Channel::setName(const QByteArray &name) {
   m_name = name;
 }
@@ -122,9 +119,11 @@ QSharedPointer<Channel> Channel::get_or_create(const QByteArray &channel_name) {
 }
 
 QSharedPointer<Account> Channel::accountOwner() const {
-  if (m_account_owner_id.isNull())
-    return {};
-  return Account::get_by_uid(m_account_owner_id);
+  return m_owner;
+}
+
+void Channel::setAccountOwner(const QSharedPointer<Account> &owner) {
+  m_owner = owner;
 }
 
 void Channel::onNickChanged(const QSharedPointer<Account> &acc, const QByteArray& old_nick, const QByteArray& new_nick, QSet<QSharedPointer<Account>> &broadcasted_accounts) {

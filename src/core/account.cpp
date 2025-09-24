@@ -19,6 +19,7 @@ void Account::setRandomUID() {
 
   const QUuid uuid = QUuid::createUuid();
   m_uid = uuid.toRfc4122();
+  m_uid_str = Utils::uuidBytesToString(m_uid).toUtf8();
 }
 
 QAuthUserResult Account::verifyPassword(const QByteArray &password_candidate, const QHostAddress& ip) const {
@@ -89,6 +90,7 @@ QByteArray Account::uid() {
 void Account::setUID(const QByteArray &uid) {
   QWriteLocker locker(&mtx_lock);
   m_uid = uid;
+  m_uid_str = Utils::uuidBytesToString(m_uid).toUtf8();
 }
 
 QByteArray Account::password() {

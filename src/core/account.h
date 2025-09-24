@@ -39,6 +39,7 @@ public:
   void setName(const QByteArray &name);
 
   QByteArray uid();
+  QByteArray uid_str() { return m_uid_str; }
   void setUID(const QByteArray &uid);
 
   QByteArray password();
@@ -86,6 +87,7 @@ private:
   mutable QReadWriteLock mtx_lock;
 
   QByteArray m_uid;
+  QByteArray m_uid_str;
   QByteArray m_name;
   QByteArray m_nick;
   QByteArray m_password;

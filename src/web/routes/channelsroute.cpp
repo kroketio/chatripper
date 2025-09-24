@@ -10,36 +10,39 @@
 #include "web/routes/utils.h"
 
 #include "ctx.h"
+#include "lib/utils.h"
+#include "lib/logger_std/logger_std.h"
 #include "core/channel.h"
 
 namespace ChannelsRoute {
 
 void install(QHttpServer *server, SessionStore *sessions) {
   server->route("/api/1/channels", QHttpServerRequest::Method::Get, [sessions](const QHttpServerRequest &request) {
-    QFuture<QHttpServerResponse> future =
-        QtConcurrent::run([&request, sessions]() {
-      // @TODO: require session ?
-      // const QString token = tokenFromRequest(request);
-      // if (token.isEmpty() || !sessions->validateToken(token)) {
-      //   return QHttpServerResponse("Unauthorized",
-      //                              QHttpServerResponder::StatusCode::Unauthorized);
-      // }
+    QFuture<QHttpServerResponse> future = QtConcurrent::run([&request, sessions] {
+      const QString token = tokenFromRequest(request);
+      if (token.isEmpty() || !sessions->validateToken(token))
+        return QHttpServerResponse("Unauthorized", QHttpServerResponder::StatusCode::Unauthorized);
 
-      QJsonArray arr;
+      rapidjson::Document root;
+      root.SetObject();
+      auto& allocator = root.GetAllocator();
+
+      rapidjson::Value channelsArray(rapidjson::kArrayType);
       for (const auto &c : g::ctx->channels.values()) {
-        if (!c)
-          continue;
-        QJsonObject o;
-        o.insert("id", QString::fromUtf8(c->uid));
-        o.insert("name", QString::fromUtf8(c->name()));
-        o.insert("topic", QString::fromUtf8(c->topic()));
-        arr.append(o);
+          if (!c)
+            continue;
+        channelsArray.PushBack(c->to_rapidjson(allocator), allocator);
       }
 
-      QJsonObject root;
-      root.insert("channels", arr);
+      root.AddMember("channels", channelsArray, allocator);
 
-      return QHttpServerResponse("application/json", QJsonDocument(root).toJson(), QHttpServerResponder::StatusCode::Ok);
+      // serialize
+      rapidjson::StringBuffer buffer;
+      rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+      root.Accept(writer);
+
+      QByteArray jsonData(buffer.GetString(), static_cast<int>(buffer.GetSize()));
+      return QHttpServerResponse("application/json", jsonData, QHttpServerResponder::StatusCode::Ok);
     });
     return future;
   });
