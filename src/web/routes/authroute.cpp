@@ -1,4 +1,3 @@
-#include "web/routes/authroute.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QHttpServerResponse>
@@ -7,12 +6,33 @@
 #include <QHostAddress>
 #include <QJsonParseError>
 
+#include "web/routes/authroute.h"
 #include "web/ratelimiter.h"
 #include "web/sessionstore.h"
-
 #include "web/routes/utils.h"
 
+#include "core/qtypes.h"
+#include "lib/bcrypt/bcrypt.h"
+#include "ctx.h"
+
 namespace AuthRoute {
+
+QHttpServerResponse create_session(const QString& username, SessionStore *sessions) {
+  // create session
+  const QString token = sessions->createSession(username);
+
+  // prepare response JSON
+  const QByteArray json = QJsonDocument(QJsonObject{{"ok", true}}).toJson();
+
+  // build headers
+  QHttpHeaders headers;
+  headers.insert(0, "Set-Cookie", QString("session=%1; Path=/; HttpOnly; SameSite=Lax").arg(token));
+
+  // build response with MIME, body and status, then attach headers
+  QHttpServerResponse res("application/json", json, QHttpServerResponder::StatusCode::Created);
+  res.setHeaders(std::move(headers));
+  return res;
+}
 
 void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) {
   // POST /api/1/login
@@ -38,24 +58,31 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
       const QString username = obj.value("username").toString();
       const QString password = obj.value("password").toString();
 
-      // @TODO: replace with real authentication
-      if (username.isEmpty() || password.isEmpty() || password != "password")
+      if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
+        const auto res = g::ctx->snakepit->event(
+          QIRCEvent::AUTH_SASL_PLAIN,
+          username,
+          password,
+          ip.toString());
+
+        if (!res.canConvert<QAuthUserResult>())
+          return create_session(username, sessions);
+
+        return QHttpServerResponse("invalid credentials", QHttpServerResponder::StatusCode::Unauthorized);
+      }
+
+      const auto account = Account::get_by_name(username.toUtf8());
+      if (account.isNull())
         return QHttpServerResponse("invalid credentials", QHttpServerResponder::StatusCode::Unauthorized);
 
-      // create session
-      const QString token = sessions->createSession(username);
+      const std::string candidateStr = password.toStdString();
+      const std::string pw = account->password().toStdString();
+      const bool result = bcrypt::validatePassword(candidateStr, pw);
 
-      // prepare response JSON
-      const QByteArray json = QJsonDocument(QJsonObject{{"ok", true}}).toJson();
+      if (!result)
+        return QHttpServerResponse("invalid credentials", QHttpServerResponder::StatusCode::Unauthorized);
 
-      // build headers — note the index argument (0) required by QHttpHeaders::insert
-      QHttpHeaders headers;
-      headers.insert(0, "Set-Cookie", QString("session=%1; Path=/; HttpOnly; SameSite=Lax").arg(token));
-
-      // build response with MIME, body and status, then attach headers
-      QHttpServerResponse res("application/json", json, QHttpServerResponder::StatusCode::Created);
-      res.setHeaders(std::move(headers));
-      return res;
+      return create_session(username, sessions);
     });
 
     return future;
