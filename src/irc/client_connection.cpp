@@ -841,7 +841,11 @@ namespace irc {
         return;
       }
 
-      reply_num(900, "SASL authentication failed: " + reason);
+      QByteArray reply = "SASL authentication failed";
+      if (!reason.isEmpty())
+        reply += ": " + reason;
+
+      reply_num(900, reply);
       m_socket->disconnectFromHost();
       return;
     }
