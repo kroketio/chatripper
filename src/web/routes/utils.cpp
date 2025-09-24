@@ -43,3 +43,10 @@ QString tokenFromCookies(const QStringList &cookies) {
   }
   return {};
 }
+
+bool is_authenticated(const QHttpServerRequest &request) {
+  const QString token = tokenFromRequest(request);
+  if (token.isEmpty() || !g::webSessions->validateToken(token))
+    return false;
+  return true;
+}

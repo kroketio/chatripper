@@ -17,9 +17,9 @@
 
 namespace AuthRoute {
 
-QHttpServerResponse create_session(const QString& username, SessionStore *sessions) {
+QHttpServerResponse create_session(const QString& username) {
   // create session
-  const QString token = sessions->createSession(username);
+  const QString token = g::webSessions->createSession(username);
 
   // prepare response JSON
   const QByteArray json = QJsonDocument(QJsonObject{{"ok", true}}).toJson();
@@ -34,12 +34,12 @@ QHttpServerResponse create_session(const QString& username, SessionStore *sessio
   return res;
 }
 
-void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) {
+void install(QHttpServer *server, RateLimiter *limiter) {
   // POST /api/1/login
-  server->route("/api/1/login", QHttpServerRequest::Method::Post, [limiter, sessions](const QHttpServerRequest &request) {
+  server->route("/api/1/login", QHttpServerRequest::Method::Post, [limiter](const QHttpServerRequest &request) {
     const QHostAddress ip = ipFromRequest(request);
 
-    QFuture<QHttpServerResponse> future = QtConcurrent::run([&request, ip, limiter, sessions]() {
+    QFuture<QHttpServerResponse> future = QtConcurrent::run([&request, ip, limiter]() {
       // rate limit by IP
       if (auto [allowed, retryAfter] = limiter->check(ip); !allowed) {
         const qint64 seconds = QDateTime::currentDateTimeUtc().secsTo(retryAfter);
@@ -66,7 +66,7 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
           ip.toString());
 
         if (!res.canConvert<QAuthUserResult>())
-          return create_session(username, sessions);
+          return create_session(username);
 
         return QHttpServerResponse("invalid credentials", QHttpServerResponder::StatusCode::Unauthorized);
       }
@@ -82,7 +82,7 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
       if (!result)
         return QHttpServerResponse("invalid credentials", QHttpServerResponder::StatusCode::Unauthorized);
 
-      return create_session(username, sessions);
+      return create_session(username);
     });
 
     return future;

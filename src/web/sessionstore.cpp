@@ -2,7 +2,7 @@
 #include <QRandomGenerator>
 #include <QCryptographicHash>
 
-SessionStore::SessionStore() {}
+WebSessionStore::WebSessionStore() {}
 
 static QString randomToken(int length = 32) {
   QByteArray bytes;
@@ -12,7 +12,7 @@ static QString randomToken(int length = 32) {
   return QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex();
 }
 
-QString SessionStore::createSession(const QString &username, int ttlSeconds) {
+QString WebSessionStore::createSession(const QString &username, int ttlSeconds) {
   QMutexLocker locker(&m_mutex);
   const QString token = randomToken(32);
   SessionEntry e;
@@ -22,7 +22,7 @@ QString SessionStore::createSession(const QString &username, int ttlSeconds) {
   return token;
 }
 
-bool SessionStore::validateToken(const QString &token) {
+bool WebSessionStore::validateToken(const QString &token) {
   QMutexLocker locker(&m_mutex);
   auto it = m_sessions.find(token);
   if (it == m_sessions.end())
@@ -36,7 +36,7 @@ bool SessionStore::validateToken(const QString &token) {
   return true;
 }
 
-QString SessionStore::usernameForToken(const QString &token) {
+QString WebSessionStore::usernameForToken(const QString &token) {
   QMutexLocker locker(&m_mutex);
   auto it = m_sessions.find(token);
   if (it == m_sessions.end())
@@ -44,7 +44,7 @@ QString SessionStore::usernameForToken(const QString &token) {
   return it->username;
 }
 
-void SessionStore::destroySession(const QString &token) {
+void WebSessionStore::destroySession(const QString &token) {
   QMutexLocker locker(&m_mutex);
   m_sessions.remove(token);
 }

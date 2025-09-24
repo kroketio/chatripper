@@ -46,7 +46,7 @@ static QString safeFileName(const QString &filename) {
   return base;
 }
 
-void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) {
+void install(QHttpServer *server, RateLimiter *limiter) {
   // OPTIONS /api/1/file/upload
   server->route("/api/1/file/upload", QHttpServerRequest::Method::Options, [](const QHttpServerRequest &) {
     QHttpHeaders headers;
@@ -58,7 +58,7 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
   });
 
   // POST /api/1/file/upload
-  server->route("/api/1/file/upload", QHttpServerRequest::Method::Post, [sessions, limiter](const QHttpServerRequest &request) {
+  server->route("/api/1/file/upload", QHttpServerRequest::Method::Post, [limiter](const QHttpServerRequest &request) {
     const QByteArray body = request.body();
     const QHostAddress ip = ipFromRequest(request);
 
@@ -71,7 +71,7 @@ void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions) 
     const QString contentType = QString::fromUtf8(request.headers().value("Content-Type"));
     const QString contentDisposition = QString::fromUtf8(request.headers().value("Content-Disposition"));
 
-    QFuture<QHttpServerResponse> future = QtConcurrent::run([body, limiter, ip, cookieHeaders, sessions, contentType, contentDisposition]() {
+    QFuture<QHttpServerResponse> future = QtConcurrent::run([body, limiter, ip, cookieHeaders, contentType, contentDisposition]() {
       // rate limit by IP
       if (auto [allowed, retryAfter] = limiter->check(ip); !allowed) {
         const qint64 seconds = QDateTime::currentDateTimeUtc().secsTo(retryAfter);

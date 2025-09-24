@@ -16,29 +16,28 @@
 
 namespace ChannelsRoute {
 
-void install(QHttpServer *server, SessionStore *sessions) {
-  server->route("/api/1/channels", QHttpServerRequest::Method::Get, [sessions](const QHttpServerRequest &request) {
-    QFuture<QHttpServerResponse> future = QtConcurrent::run([&request, sessions] {
-      const QString token = tokenFromRequest(request);
-      if (token.isEmpty() || !sessions->validateToken(token))
+void install(QHttpServer *server) {
+  server->route("/api/1/channels", QHttpServerRequest::Method::Get, [](const QHttpServerRequest &request) {
+    QFuture<QHttpServerResponse> future = QtConcurrent::run([&request] {
+      if (!is_authenticated(request))
         return QHttpServerResponse("Unauthorized", QHttpServerResponder::StatusCode::Unauthorized);
 
       rapidjson::Document root;
       root.SetObject();
       auto& allocator = root.GetAllocator();
 
-      rapidjson::Value channelsArray(rapidjson::kArrayType);
-      for (const auto &c : g::ctx->channels.values()) {
+      rapidjson::Value arr(rapidjson::kArrayType);
+      for (const auto &c : g::ctx->get_channels_ordered()) {
           if (!c)
             continue;
-        channelsArray.PushBack(c->to_rapidjson(allocator), allocator);
+        arr.PushBack(c->to_rapidjson(allocator), allocator);
       }
 
-      root.AddMember("channels", channelsArray, allocator);
+      root.AddMember("channels", arr, allocator);
 
       // serialize
       rapidjson::StringBuffer buffer;
-      rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+      rapidjson::Writer writer(buffer);
       root.Accept(writer);
 
       QByteArray jsonData(buffer.GetString(), static_cast<int>(buffer.GetSize()));

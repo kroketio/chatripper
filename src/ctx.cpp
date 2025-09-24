@@ -204,6 +204,23 @@ void Ctx::createConfigDirectory(const QStringList &lst) {
 
 void Ctx::onApplicationLog(const QString &msg) {}
 
+QList<QSharedPointer<Channel>> Ctx::get_channels_ordered() const {
+  QList<QSharedPointer<Channel>> values;
+  QList<QPair<uint, QSharedPointer<Channel>>> hashedList;
+
+  for (auto it = channels.cbegin(); it != channels.cend(); ++it)
+    hashedList.append(qMakePair(qHash(it.key()), it.value()));
+
+  std::sort(hashedList.begin(), hashedList.end(), [](const auto &a, const auto &b) {
+    return a.first < b.first;
+  });
+
+  for (const auto &[_, snd] : hashedList)
+    values.append(snd);
+
+  return values;
+}
+
 void onChannelMemberJoined(const QSharedPointer<Account> &account) {
   // g::ctx->accounts.value(account->name);
 }

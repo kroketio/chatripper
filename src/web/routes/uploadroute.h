@@ -1,9 +1,9 @@
 #pragma once
 #include <QHttpServer>
 
-class SessionStore;
+class WebSessionStore;
 class RateLimiter;
 
 namespace UploadRoute {
-  void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions);
+  void install(QHttpServer *server, RateLimiter *limiter);
 }

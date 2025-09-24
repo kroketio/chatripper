@@ -3,6 +3,8 @@
 #include <QDebug>
 #include <QFileInfo>
 
+#include "web/sessionstore.h"
+
 class Ctx;
 
 namespace g {
@@ -15,6 +17,6 @@ namespace g {
   extern QByteArray defaultHost;
   extern QFileInfo pathDatabase;
   extern QFileInfo pathDatabasePreload;
-
+  extern WebSessionStore* webSessions;
   extern Ctx* ctx;
 }

@@ -19,10 +19,11 @@
 
 WebServer::WebServer(QObject *parent) : QObject(parent),
     m_server(new QHttpServer(this)),
-    m_tcp_server(new QTcpServer(this)),
-    m_sessionStore() {
+    m_tcp_server(new QTcpServer(this)) {
   m_loginRateLimiter = new RateLimiter(3, 5);
   m_uploadRateLimiter = new RateLimiter(3, 5);
+  if (g::webSessions == nullptr)
+    g::webSessions = new WebSessionStore();
   registerRoutes();
 }
 
@@ -49,13 +50,13 @@ void WebServer::registerRoutes() {
   });
 
   // login route (delegates to routes/authroute)
-  AuthRoute::install(m_server, m_loginRateLimiter, &m_sessionStore);
+  AuthRoute::install(m_server, m_loginRateLimiter);
 
   // channels
-  ChannelsRoute::install(m_server, &m_sessionStore);
+  ChannelsRoute::install(m_server);
 
   // upload route (requires valid session)
-  UploadRoute::install(m_server, m_uploadRateLimiter, &m_sessionStore);
+  UploadRoute::install(m_server, m_uploadRateLimiter);
 }
 
 void WebServer::stop() {

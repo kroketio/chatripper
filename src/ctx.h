@@ -25,6 +25,9 @@
 #include "irc/server.h"
 #include "python/manager.h"
 
+#include <QPair>
+#include <algorithm>
+
 class Ctx final : public QObject {
 Q_OBJECT
 
@@ -54,6 +57,7 @@ public:
   // they need to be lowercase
   QHash<QByteArray, QSharedPointer<Account>> irc_nicks;
   QHash<QByteArray, QSharedPointer<Channel>> channels;
+  QList<QSharedPointer<Channel>> get_channels_ordered() const;
 
   void startIRC(int port, const QByteArray& password);
 

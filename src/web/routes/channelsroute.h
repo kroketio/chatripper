@@ -1,8 +1,8 @@
 #pragma once
 #include <QHttpServer>
 
-class SessionStore;
+class WebSessionStore;
 
 namespace ChannelsRoute {
-  void install(QHttpServer *server, SessionStore *sessions);
+  void install(QHttpServer *server);
 }

@@ -3,8 +3,8 @@
 #include <QHttpServerRequest>
 
 class RateLimiter;
-class SessionStore;
+class WebSessionStore;
 
 namespace AuthRoute {
-  void install(QHttpServer *server, RateLimiter *limiter, SessionStore *sessions);
+  void install(QHttpServer *server, RateLimiter *limiter);
 }

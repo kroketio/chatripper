@@ -11,6 +11,6 @@ namespace g {
   QByteArray defaultHost;
   QFileInfo pathDatabase;
   QFileInfo pathDatabasePreload;
-  //
+  WebSessionStore* webSessions = nullptr;
   Ctx* ctx = nullptr;
 }

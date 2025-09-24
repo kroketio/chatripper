@@ -4,10 +4,10 @@
 #include <QMutex>
 #include <QDateTime>
 
-class SessionStore {
+class WebSessionStore {
 public:
-  SessionStore();
-  ~SessionStore() = default;
+  WebSessionStore();
+  ~WebSessionStore() = default;
 
   // create a session token for a user (returns token)
   QString createSession(const QString &username, int ttlSeconds = 3600);
