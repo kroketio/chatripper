@@ -28,8 +28,7 @@ void install(QHttpServer *server) {
 
       rapidjson::Value arr(rapidjson::kArrayType);
       for (const auto &c : g::ctx->get_channels_ordered()) {
-          if (!c)
-            continue;
+        if (c.isNull()) continue;
         arr.PushBack(c->to_rapidjson(allocator), allocator);
       }
 
