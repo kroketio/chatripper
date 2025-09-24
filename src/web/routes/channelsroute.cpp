@@ -1,25 +1,25 @@
-#include "web/routes/channelsroute.h"
-#include "web/sessionstore.h"
-
 #include <QHttpServerResponse>
 #include <QtConcurrent>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonDocument>
 
+#include "web/routes/channelsroute.h"
+#include "web/sessionstore.h"
 #include "web/routes/utils.h"
 
 #include "ctx.h"
+#include "core/channel.h"
 #include "lib/utils.h"
 #include "lib/logger_std/logger_std.h"
-#include "core/channel.h"
 
 namespace ChannelsRoute {
 
 void install(QHttpServer *server) {
   server->route("/api/1/channels", QHttpServerRequest::Method::Get, [](const QHttpServerRequest &request) {
     QFuture<QHttpServerResponse> future = QtConcurrent::run([&request] {
-      if (!is_authenticated(request))
+      const auto current_user = g::webSessions->get_user(request);
+      if (current_user.isNull())
         return QHttpServerResponse("Unauthorized", QHttpServerResponder::StatusCode::Unauthorized);
 
       rapidjson::Document root;

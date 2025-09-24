@@ -10,7 +10,7 @@
 #include <QDateTime>
 #include <QHash>
 
-#include "globals.h"
+#include "lib/globals.h"
 #include "core/qtypes.h"
 #include "irc/client_connection.h"
 

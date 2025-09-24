@@ -15,6 +15,7 @@
 #include <QDateTime>
 #include <QUuid>
 
+#include "lib/globals.h"
 #include "web/routes/utils.h"
 #include "ctx.h"
 
@@ -71,7 +72,7 @@ void install(QHttpServer *server, RateLimiter *limiter) {
     const QString contentType = QString::fromUtf8(request.headers().value("Content-Type"));
     const QString contentDisposition = QString::fromUtf8(request.headers().value("Content-Disposition"));
 
-    QFuture<QHttpServerResponse> future = QtConcurrent::run([body, limiter, ip, cookieHeaders, contentType, contentDisposition]() {
+    QFuture<QHttpServerResponse> future = QtConcurrent::run([body, limiter, ip, cookieHeaders, contentType, contentDisposition, &request]() {
       // rate limit by IP
       if (auto [allowed, retryAfter] = limiter->check(ip); !allowed) {
         const qint64 seconds = QDateTime::currentDateTimeUtc().secsTo(retryAfter);
@@ -79,10 +80,9 @@ void install(QHttpServer *server, RateLimiter *limiter) {
         return QHttpServerResponse(msg, QHttpServerResponder::StatusCode::TooManyRequests);
       }
 
-      // @TODO: auth
-      // const QString token = tokenFromCookies(cookieHeaders);
-      // if (token.isEmpty() || !sessions->validateToken(token))
-      //   return QHttpServerResponse("Unauthorized", QHttpServerResponder::StatusCode::Unauthorized);
+      const auto current_user = g::webSessions->get_user(request);
+      if (current_user.isNull())
+        return QHttpServerResponse("Unauthorized", QHttpServerResponder::StatusCode::Unauthorized);
 
       if (body.size() > MAX_UPLOAD_SIZE)
         return QHttpServerResponse("File too large", QHttpServerResponder::StatusCode::PayloadTooLarge);

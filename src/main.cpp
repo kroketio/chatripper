@@ -10,6 +10,7 @@
 
 #include "python/interpreter.h"
 #include "lib/logger_std/logger_std.h"
+#include "lib/globals.h"
 #include "ctx.h"
 
 int main(int argc, char *argv[]) {

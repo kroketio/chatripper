@@ -4,6 +4,10 @@
 #include <QMutex>
 #include <QDateTime>
 
+#include "web/routes/utils.h"
+
+class Account;
+
 class WebSessionStore {
 public:
   WebSessionStore();
@@ -20,6 +24,8 @@ public:
 
   // destroy a session
   void destroySession(const QString &token);
+
+  QSharedPointer<Account> get_user(const QHttpServerRequest &request);
 
 private:
   struct SessionEntry {
