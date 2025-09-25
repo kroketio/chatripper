@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(snakepit LANGUAGES CXX)
+project(circus LANGUAGES CXX)
 
 option(ENABLE_DEBUG_TIMINGS "Write time measurements to /tmp/server.timings to debug performance." TRUE)
 
@@ -47,13 +47,13 @@ file(GLOB SOURCE_FILES
 
 add_subdirectory(src/lib/logger_std)
 
-add_executable(snakepit
+add_executable(circus
     src/main.cpp
     ${SOURCE_FILES}
 )
 
 if(ENABLE_DEBUG_TIMINGS)
-    target_compile_definitions(snakepit
+    target_compile_definitions(circus
         PUBLIC
         ENABLE_DEBUG_TIMINGS=1
     )
@@ -61,15 +61,15 @@ endif()
 
 if(DEBUG)
     message(STATUS "DEBUG BUILD")
-    target_compile_definitions(snakepit PRIVATE DEBUG=1)
+    target_compile_definitions(circus PRIVATE DEBUG=1)
 endif()
 
-target_include_directories(snakepit PRIVATE
+target_include_directories(circus PRIVATE
         src
         src/lib
         ${RapidJSON_INCLUDE_DIRS})
 
-target_link_libraries(snakepit PRIVATE
+target_link_libraries(circus PRIVATE
         Qt6::Core
         Qt6::Network
         Qt6::Gui

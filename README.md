@@ -1,6 +1,4 @@
-## SnakePit
-
-![](src/assets/header_small.jpg)
+## cIRCus
 
 Self-hosted, open-source, high performance chat server.
 
