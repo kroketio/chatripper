@@ -49,7 +49,7 @@ More info [docs/modules.md](docs/modules.md)
 ## Requirements
 
 - Platform(s) supported: Linux x86/64
-- Dependencies: Qt6, Python >= 3.13
+- Dependencies: Qt6, Python >= 3.13, rapidjson
 - Build dependencies: CMake, C++17
 
 ## Testimonials
