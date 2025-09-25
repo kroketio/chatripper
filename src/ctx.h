@@ -58,6 +58,7 @@ public:
   QHash<QByteArray, QSharedPointer<Account>> irc_nicks;
   QHash<QByteArray, QSharedPointer<Channel>> channels;
   QList<QSharedPointer<Channel>> get_channels_ordered() const;
+  QList<QSharedPointer<Account>> get_accounts_ordered() const;
 
   void startIRC(int port, const QByteArray& password);
 

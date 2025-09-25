@@ -10,6 +10,10 @@
 #include <QDateTime>
 #include <QHash>
 
+#include <rapidjson/document.h>
+#include <rapidjson/stringbuffer.h>
+#include <rapidjson/writer.h>
+
 #include "lib/globals.h"
 #include "core/qtypes.h"
 #include "irc/client_connection.h"
@@ -95,4 +99,5 @@ private:
 
 public:
   QVariantMap to_variantmap() const;
+  rapidjson::Value to_rapidjson(rapidjson::Document::AllocatorType& allocator, bool include_channels = false, bool include_connection_count = false) const;
 };

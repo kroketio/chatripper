@@ -14,6 +14,7 @@
 #include "web/routes/authroute.h"
 #include "web/routes/channelsroute.h"
 #include "web/routes/uploadroute.h"
+#include "web/routes/user.h"
 
 #include "lib/utils.h"
 
@@ -54,6 +55,9 @@ void WebServer::registerRoutes() {
 
   // channels
   ChannelsRoute::install(m_server);
+
+  // users
+  UsersRoute::install(m_server);
 
   // upload route (requires valid session)
   UploadRoute::install(m_server, m_uploadRateLimiter);

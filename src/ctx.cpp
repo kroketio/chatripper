@@ -221,6 +221,21 @@ QList<QSharedPointer<Channel>> Ctx::get_channels_ordered() const {
   return values;
 }
 
+// @TODO: probably slow
+QList<QSharedPointer<Account>> Ctx::get_accounts_ordered() const {
+  QList<QSharedPointer<Account>> list = accounts.values();
+
+  std::sort(list.begin(), list.end(), [](const QSharedPointer<Account> &a, const QSharedPointer<Account> &b) {
+    if (a.isNull() || b.isNull())
+      return false;
+    return a->name().compare(b->name()) < 0;
+  });
+
+  return list;
+}
+
+
+
 void onChannelMemberJoined(const QSharedPointer<Account> &account) {
   // g::ctx->accounts.value(account->name);
 }

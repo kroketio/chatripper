@@ -292,3 +292,34 @@ QVariantMap Account::to_variantmap() const {
 
   return map;
 }
+
+rapidjson::Value Account::to_rapidjson(rapidjson::Document::AllocatorType& allocator, bool include_channels, bool include_connection_count) const {
+  QReadLocker locker(&mtx_lock);
+
+  rapidjson::Value obj(rapidjson::kObjectType);
+
+  // strings
+  obj.AddMember("uid", rapidjson::Value(m_uid_str.constData(), allocator), allocator);
+  obj.AddMember("name", rapidjson::Value(m_name.constData(), allocator), allocator);
+  obj.AddMember("nick", rapidjson::Value(m_nick.constData(), allocator), allocator);
+  obj.AddMember("host", rapidjson::Value((m_host.isEmpty() ? g::defaultHost : m_host).constData(), allocator), allocator);
+
+  // date as string
+  obj.AddMember("creation_date", rapidjson::Value(creation_date.toString(Qt::ISODate).toUtf8().constData(), allocator), allocator);
+
+  if (include_channels) {
+    // channels (only UID)
+    rapidjson::Value channelsArray(rapidjson::kArrayType);
+    for (auto it = channels.begin(); it != channels.end(); ++it) {
+      if (it.value()) {
+        channelsArray.PushBack(rapidjson::Value(it.value()->uid.constData(), allocator), allocator);
+      }
+    }
+    obj.AddMember("channels", channelsArray, allocator);
+  }
+
+  if (include_connection_count)
+    obj.AddMember("connections_count", static_cast<int>(connections.size()), allocator);
+
+  return obj;
+}
