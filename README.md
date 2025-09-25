@@ -24,7 +24,7 @@ Work in progress.
 
 ## Server-side scripting
 
-Change messages on-the-fly, modify/add IRCv3 message tags, and more.
+Change messages in transit, modify/add IRCv3 message tags, and more.
 
 ```python3
 class MyModule(QIRCModule):
@@ -48,9 +48,11 @@ More info [docs/modules.md](docs/modules.md)
 
 ## Requirements
 
-- Platform(s) supported: Linux x86/64
+- Platform(s) supported: Linux x86/64, ARM64
 - Dependencies: Qt6, Python >= 3.13, rapidjson
 - Build dependencies: CMake, C++17
+
+See [docs/building.md](docs/building.md)
 
 ## Testimonials
 

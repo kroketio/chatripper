@@ -54,6 +54,7 @@ file(GLOB SOURCE_FILES
 )
 
 add_subdirectory(src/lib/logger_std)
+add_subdirectory(src/lib/minisign)
 
 add_executable(circus
     src/main.cpp
