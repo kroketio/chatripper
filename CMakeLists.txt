@@ -91,3 +91,8 @@ target_link_libraries(circus PRIVATE
     logger_std
     minisign::minisign
 )
+
+set_target_properties(circus PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LINK_FLAGS_RELEASE -s
+)
