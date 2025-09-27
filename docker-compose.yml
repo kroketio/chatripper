@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  circus:
+    build: .
+    tty: true
+    stdin_open: true
+    ports:
+      - "6667:6667"
+      - "3000:3000"
+    environment:
+      - foo=bar
