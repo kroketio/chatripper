@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.18)
 project(circus
     VERSION "0.0.1"
     DESCRIPTION "conversations"
-    LANGUAGES CXX
+    LANGUAGES CXX C
 )
 
 option(ENABLE_DEBUG_TIMINGS "Write time measurements to /tmp/server.timings to debug performance." TRUE)
@@ -12,9 +12,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(DEBUG ON)
 endif()
 
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTORCC ON)
-set(CMAKE_AUTOUIC ON)
+set(CMAKE_AUTOMOC OFF)
+set(CMAKE_AUTOUIC OFF)
+set(CMAKE_AUTORCC OFF)
 set(EXECUTABLE_FLAG)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -23,6 +23,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(FindCcache)
 
 configure_file("cmake/config-circus.h.cmake" "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/config-circus.h")
+
+# https://github.com/kroketio/libminisign
+find_package(minisign REQUIRED)
 
 find_package(RapidJSON REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS Core Network Gui Sql HttpServer Concurrent)
@@ -54,7 +57,6 @@ file(GLOB SOURCE_FILES
 )
 
 add_subdirectory(src/lib/logger_std)
-add_subdirectory(src/lib/minisign)
 
 add_executable(circus
     src/main.cpp
@@ -87,4 +89,5 @@ target_link_libraries(circus PRIVATE
     Qt6::Concurrent
     Python3::Python
     logger_std
+    minisign::minisign
 )

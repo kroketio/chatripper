@@ -2,25 +2,38 @@
 
 ### Requirements
 
-cIRCus runs exclusively on Linux. On an Ubuntu based system, the dependencies 
-required are:
+cIRCus runs exclusively on Linux. On an Ubuntu based system, the system dependencies 
+you can install are:
 
 ```bash
 sudo apt install -y \
-  build-essential \
   qt6-base-dev libqt6network6 libqt6gui6 libqt6sql6 libqt6httpserver6 libqt6concurrent6 \
+  build-essential \
+  pkg-config \
+  cmake \
+  ccache \
   rapidjson-dev \
-  libsodium-dev \
-  cmake ccache
+  libsodium-dev
 ```
 
 `libqt6httpserver6` may fail to install, as some older Ubuntu 
 versions do not have it. In this case it is best you install Qt6 manually 
 via the [Qt online installer](https://www.qt.io/download-open-source).
 
+### libminisign
+
+This dependency you need to install manually:
+
+```bash
+git clone https://github.com/kroketio/libminisign.git
+cd libminisign
+cmake -Bbuild .
+sudo make -Cbuild -j4 install
+```
+
 ### Compilation
 
-Using CMake we'll do an out-of-tree build.
+Using CMake we'll do an out-of-tree build. Move to the cIRCus root directory and:
 
 ```bash
 cmake -Bbuild .
