@@ -13,7 +13,7 @@ import inspect
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Callable, Set
@@ -111,7 +111,7 @@ class Account:
     host: Optional[str] = None
 
     uid: bytes = field(default_factory=lambda: uuid4())
-    creation_date: datetime = field(default_factory=datetime.utcnow)
+    creation_date: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     channels: List[bytes] = field(default_factory=list)
 
@@ -159,7 +159,7 @@ class Channel:
     topic: str = ""
     key: Optional[str] = None
     account_owner_id: Optional[str] = None
-    date_creation: datetime = field(default_factory=datetime.utcnow)
+    date_creation: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     # members: List["Account"] = field(default_factory=list)
     members: List[bytes] = field(default_factory=list)
