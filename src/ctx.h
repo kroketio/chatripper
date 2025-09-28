@@ -22,7 +22,7 @@
 #include "core/account.h"
 
 #include "irc/client_connection.h"
-#include "irc/server.h"
+#include "irc/threaded_server.h"
 #include "python/manager.h"
 
 #include <QPair>
@@ -37,7 +37,7 @@ public:
   QString configRoot;
   QString homeDir;
 
-  irc::Server *irc_server = nullptr;
+  irc::ThreadedServer* irc_server = nullptr;
   WebServer *web_server = nullptr;
   SnakePit* snakepit = nullptr;
 

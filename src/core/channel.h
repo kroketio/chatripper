@@ -75,6 +75,7 @@ public slots:
   void onNickChanged(const QSharedPointer<Account> &ptr, const QByteArray& old_nick, const QByteArray& new_nick, QSet<QSharedPointer<Account>> &broadcasted_accounts);
 
 private:
+  mutable QReadWriteLock mtx_lock;
   QByteArray m_name;
   QByteArray m_topic;
   QByteArray m_key;
@@ -87,6 +88,7 @@ private:
 
 public:
   QVariantMap to_variantmap() {
+    QReadLocker locker(&mtx_lock);
     QVariantMap obj;
 
     obj["uid"] = QString::fromUtf8(uid);
@@ -126,6 +128,7 @@ public:
   }
 
   rapidjson::Value to_rapidjson(rapidjson::Document::AllocatorType& allocator) {
+    QReadLocker locker(&mtx_lock);
     rapidjson::Value obj(rapidjson::kObjectType);
 
     // strings

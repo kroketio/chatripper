@@ -1,6 +1,6 @@
 ## cIRCus
 
-Self-hosted, open-source, high performance chat server.
+Self-hosted, open-source, performant chat server.
 
 Work in progress.
 

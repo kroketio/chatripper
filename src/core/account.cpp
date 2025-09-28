@@ -4,6 +4,7 @@
 
 #include "bcrypt/bcrypt.h"
 #include "lib/globals.h"
+#include "core/qtypes.h"
 #include "account.h"
 #include "channel.h"
 #include "ctx.h"
@@ -31,19 +32,19 @@ QAuthUserResult Account::verifyPassword(const QByteArray &password_candidate, co
     return rtn;
   }
 
-  if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
-    const auto res = g::ctx->snakepit->event(
-      QIRCEvent::AUTH_SASL_PLAIN,
-      QString::fromUtf8(m_name),
-      QString::fromUtf8(password_candidate),
-      ip.toString());
-
-    if (res.canConvert<QAuthUserResult>())
-      return res.value<QAuthUserResult>();
-
-    rtn.reason = "application error";
-    return rtn;
-  }
+  // if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
+  //   const auto res = g::ctx->snakepit->event(
+  //     QIRCEvent::AUTH_SASL_PLAIN,
+  //     QString::fromUtf8(m_name),
+  //     QString::fromUtf8(password_candidate),
+  //     ip.toString());
+  //
+  //   if (res.canConvert<QAuthUserResult>())
+  //     return res.value<QAuthUserResult>();
+  //
+  //   rtn.reason = "application error";
+  //   return rtn;
+  // }
 
   const std::string candidateStr = password_candidate.toStdString();
   const std::string pw = m_password.toStdString();
@@ -52,11 +53,21 @@ QAuthUserResult Account::verifyPassword(const QByteArray &password_candidate, co
   return rtn;
 }
 
+QSharedPointer<Account> Account::create() {
+  auto account = QSharedPointer<Account>(new Account());
+  if (g::mainThread != QThread::currentThread())
+    account->moveToThread(g::mainThread);
+  return account;
+}
+
 QSharedPointer<Account> Account::create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation) {
   if (const auto ptr = get_by_name(username); !ptr.isNull())
     return ptr;
 
-  QSharedPointer<Account> account = QSharedPointer<Account>::create(username);
+  auto account = QSharedPointer<Account>(new Account(username));
+  if (g::mainThread != QThread::currentThread())
+    account->moveToThread(g::mainThread);
+
   account->setUID(id);
   account->setName(username);
   account->setPassword(password);
@@ -109,7 +120,7 @@ QByteArray Account::nick() {
     return m_nick;
 
   for (const auto& conn: connections) {
-    return conn->nick;  // segfault here -> conn->disconnected() -> account.cpp g::ctx->irc_nicks_remove_cache(nick()); -> this
+    return conn->nick;
   }
 
   return {};
@@ -214,25 +225,29 @@ void Account::broadcast_nick_changed(const QByteArray& msg) const {
   }
 }
 
+void Account::onConnectionDisconnected(irc::client_connection *conn, const QByteArray& nick_to_delete) {
+  QWriteLocker locker(&mtx_lock);
+  connections.removeAll(conn);
+  locker.unlock();
+
+  // when unregistered, we need to clean the global account roster
+  if (!is_logged_in()) {
+    g::ctx->irc_nicks_remove_cache(nick_to_delete);
+
+    const auto self = get_by_uid(uid());
+    if (self.isNull())
+      return;
+
+    g::ctx->account_remove_cache(self);
+  }
+}
+
 void Account::add_connection(irc::client_connection *ptr) {
-  connect(ptr, &irc::client_connection::disconnected, [=](const QByteArray& nick_to_delete) {
-    QWriteLocker locker(&mtx_lock);
-    connections.removeAll(ptr);
-    locker.unlock();
-
-    // when unregistered, we need to clean the global account roster
-    if (!is_logged_in()) {
-      g::ctx->irc_nicks_remove_cache(nick_to_delete);
-
-      const auto self = get_by_uid(uid());
-      if (self.isNull())
-        return;
-
-      g::ctx->account_remove_cache(self);
-    }
-  });
-
   connections << ptr;
+}
+
+void Account::clearConnections() {
+  connections.clear();
 }
 
 QSharedPointer<Account> Account::get_by_uid(const QByteArray &uid) {
@@ -256,6 +271,7 @@ void Account::merge(const QSharedPointer<Account> &from) {
   for (const auto& conn: from->connections)
     add_connection(conn);
 
+  from->clearConnections();
   g::ctx->account_remove_cache(from);
 
   // @TODO: maybe update the db, update message authors.. but probably not

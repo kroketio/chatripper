@@ -18,5 +18,6 @@ namespace g {
   extern QFileInfo pathDatabase;
   extern QFileInfo pathDatabasePreload;
   extern WebSessionStore* webSessions;
+  extern QThread* mainThread;
   extern Ctx* ctx;
 }

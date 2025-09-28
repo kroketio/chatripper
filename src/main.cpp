@@ -1,6 +1,5 @@
 #include <Python.h>
 
-#include "irc/server.h"
 #include "irc/modes.h"
 
 #include <QCoreApplication>

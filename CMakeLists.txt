@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 project(circus
     VERSION "0.0.1"
-    DESCRIPTION "conversations"
+    DESCRIPTION "circus"
     LANGUAGES CXX C
 )
 

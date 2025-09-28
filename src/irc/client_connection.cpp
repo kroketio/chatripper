@@ -1,7 +1,8 @@
 #include <QHostAddress>
 #include <QDateTime>
+#include <QMutexLocker>
 
-#include "irc/server.h"
+#include "irc/threaded_server.h"
 #include "irc/client_connection.h"
 
 #include "ctx.h"
@@ -10,28 +11,50 @@
 #include "lib/globals.h"
 
 namespace irc {
-  client_connection::client_connection(Server *server, QTcpSocket *socket) :
-    QObject(server), m_server(server), m_socket(socket) {
+  constexpr static qint64 CHUNK_SIZE = 1024;
 
-    m_account = QSharedPointer<Account>(new Account());
+  client_connection::client_connection(ThreadedServer* server, QTcpSocket* socket, QObject *parent) : QObject(parent), m_socket(socket), m_server(server) {
+    setup_tasks.set(
+        ConnectionSetupTasks::CAP_EXCHANGE,
+        ConnectionSetupTasks::NICK,
+        ConnectionSetupTasks::USER);
+
+    m_available_modes_count = static_cast<unsigned int>(UserModes::COUNT);
+    m_time_connection_established = QDateTime::currentSecsSinceEpoch();
+
+    m_account = Account::create();
     m_account->setRandomUID();
     m_account->add_connection(this);
     g::ctx->account_insert_cache(m_account);
 
-    m_available_modes_count = static_cast<unsigned int>(UserModes::COUNT);
     // m_host = socket->peerAddress().toString().toUtf8();
     m_host = g::defaultHost;
-    m_time_connection_established = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
 
-    setup_tasks.set(
-        ConnectionSetupTasks::CAP_EXCHANGE,
-        ConnectionSetupTasks::NICK,
-        ConnectionSetupTasks::USER
-        );
+    // m_inactivityTimer = new QTimer(this);
+    // m_inactivityTimer->setSingleShot(true);
+    // connect(m_inactivityTimer, &QTimer::timeout, this, [this]{
+    //     onSocketDisconnected();
+    // });
+    // m_inactivityTimer->start(MAX_INACTIVITY_MS);
 
+    connect(this, &client_connection::sendData, this, &client_connection::onWrite);
+  }
+
+  void client_connection::handleConnection(const QHostAddress &peer_ip) {
+    m_remote = peer_ip;
     connect(m_socket, &QTcpSocket::readyRead, this, &client_connection::onReadyRead);
     connect(m_socket, &QTcpSocket::disconnected, this, &client_connection::onSocketDisconnected);
   }
+
+  // void wefe() {
+  //   m_account = Account::create();
+  //   m_account->setRandomUID();
+  //   m_account->add_connection(this);
+  //   g::ctx->account_insert_cache(m_account);
+  //
+  //   // m_host = socket->peerAddress().toString().toUtf8();
+  //   m_host = g::defaultHost;
+  // }
 
   void client_connection::handleCAP(const QList<QByteArray> &args) {
     if (!setup_tasks.has(ConnectionSetupTasks::CAP_EXCHANGE)) {
@@ -320,6 +343,7 @@ namespace irc {
     }
 
     // finally update the bit in user_modes
+    QMutexLocker locker(&mtx_lock);
     if (adding) user_modes.set(mode);
     else user_modes.clear(mode);
   }
@@ -378,27 +402,28 @@ namespace irc {
   }
 
   void client_connection::channel_send_topic(const QByteArray &channel_name, const QByteArray &topic) {
-
+    QMutexLocker locker(&mtx_lock);
   }
 
   void client_connection::self_message(const QByteArray& target, const QSharedPointer<QMessage> &message) const {
     if (capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE)) {
       const QByteArray msg = ":" + prefix() + " PRIVMSG " + target + " :" + message->text + "\r\n";
-      m_socket->write(msg);
+      emit sendData(msg);
     }
   }
 
   void client_connection::message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QMessage> &message) const {
     const QByteArray msg = ":" + src->prefix(0) + " PRIVMSG " + target + " :" + message->text + "\r\n";
-    m_socket->write(msg);
+    emit sendData(msg);
   }
 
   void client_connection::channel_join(const QSharedPointer<Channel> &channel, const QSharedPointer<Account> &account, const QByteArray &password) {
     const auto acc_prefix = account->prefix(0);
 
     const QByteArray msg = ":" + acc_prefix + " JOIN :#" + channel->name() + "\r\n";
-    m_socket->write(msg);
+    emit sendData(msg);
 
+    QMutexLocker locker(&mtx_lock);
     if (!channel_members.contains(channel))
       channel_members[channel] = {};
     channel_members[channel] << account;
@@ -415,6 +440,8 @@ namespace irc {
     }
 
     // this connection is already in the channel
+    // @TODO: move `channels` mutations to setters/getters+lock
+    QMutexLocker locker(&mtx_lock);
     if (channels.contains(channel_name))
       return;
 
@@ -425,6 +452,7 @@ namespace irc {
     }
 
     channels[channel_name] = channel;
+    locker.unlock();
 
     reply_self("JOIN", ":#" + channel_name);
 
@@ -458,8 +486,9 @@ namespace irc {
 
     const QByteArray reason = message.isEmpty() ? "" : " :" + message;
     const QByteArray msg = ":" + acc_prefix + " PART #" + channel->name() + reason + "\r\n";
-    m_socket->write(msg);
+    emit sendData(msg);
 
+    QMutexLocker locker(&mtx_lock);
     if (channel_members.contains(channel))
       channel_members.remove(channel);
   }
@@ -467,8 +496,11 @@ namespace irc {
   void client_connection::channel_part(const QByteArray &channel_name, const QByteArray &message) {
     // local bookkeeping
     const auto ptr = Channel::get(channel_name);
+
+    QMutexLocker locker(&mtx_lock);
     channel_members.remove(ptr);
     channels.remove(channel_name);
+    locker.unlock();
 
     reply_self("PART", ":#" + channel_name);
   }
@@ -569,7 +601,7 @@ namespace irc {
     //   for (auto const &acc: ch->members()) {
     //     for (const auto &c: acc->connections()) {
     //       if (c != this) {
-    //         c->m_socket->write(line);
+    //         c->write(line);
     //       }
     //     }
     //   }
@@ -660,7 +692,7 @@ namespace irc {
     //
     //   for (auto const &acc: ch->members()) {
     //     for (const auto &c: acc->connections()) {
-    //       c->m_socket->write(line);
+    //       c->write(line);
     //     }
     //   }
     // }
@@ -685,13 +717,13 @@ namespace irc {
 
     // @TODO: needs a broadcast to all users in a channel that this m_nick is in
     // https://ircv3.net/specs/extensions/chghost
-    // m_socket->write(":" + prefix() + " CHGHOST " + m_nick + " " + new_host + "\r\n");
+    // write(":" + prefix() + " CHGHOST " + m_nick + " " + new_host + "\r\n");
     // m_nick = new_host;
   }
 
   bool client_connection::change_nick(const QByteArray &new_nick) {
     const QByteArray msg = ":" + prefix() + " NICK :" + new_nick + "\r\n";
-    m_socket->write(msg);
+    emit sendData(msg);
     return true;
   }
 
@@ -706,7 +738,7 @@ namespace irc {
     }
 
     const QByteArray msg = ":" + _prefix + " NICK :" + new_nick + "\r\n";
-    m_socket->write(msg);
+    emit sendData(msg);
 
     setup_tasks.clear(ConnectionSetupTasks::NICK);
     try_finalize_setup();
@@ -714,9 +746,9 @@ namespace irc {
     return true;
   }
 
-  void client_connection::send_raw(const QByteArray &line) {
-    QByteArray out = ":" + m_server->serverName() + " " + line + "\r\n";
-    m_socket->write(out);
+  void client_connection::send_raw(const QByteArray &line) const {
+    const QByteArray out = ":" + ThreadedServer::serverName() + " " + line + "\r\n";
+    emit sendData(out);
   }
 
   void client_connection::change_host(const QSharedPointer<Account> &acc, const QByteArray &new_host) {
@@ -738,31 +770,45 @@ namespace irc {
     if (!args.isEmpty())
       line += " " + args;
     line += "\r\n";
-    m_socket->write(line);
+    emit sendData(line);
   }
 
   void client_connection::onReadyRead() {
-    m_buffer += m_socket->readAll();
+    // @TODO: deal with clients sending data too fast - fakelag
+    while (m_socket->bytesAvailable() > 0) {
+      constexpr qint64 MAX_BUFFER_SIZE = 1024;
+
+      QByteArray chunk = m_socket->read(qMin(m_socket->bytesAvailable(), CHUNK_SIZE));
+      if (chunk.isEmpty())
+        break;
+      m_buffer.append(chunk);
+
+      if (m_buffer.size() > MAX_BUFFER_SIZE) {
+#ifndef QT_NO_DEBUG_OUTPUT
+        qDebug() << "client sent too much data without newline, discarding buffer";
+#endif
+        m_buffer.clear();
+        // @TODO: add to naughty clients list
+        return onSocketDisconnected();
+      }
+    }
+
     while (true) {
-      const int n = m_buffer.indexOf("\n");
+      int n = m_buffer.indexOf('\n');
       if (n < 0)
         break;
+
       QByteArray raw = m_buffer.left(n);
-      if (raw.endsWith("\r"))
+      if (raw.endsWith('\r'))
         raw.chop(1);
+
       m_buffer.remove(0, n + 1);
       parseIncoming(raw);
     }
   }
 
   void client_connection::onSocketDisconnected() {
-    // part all channels
-    // @TODO:
-    // for (Channel *ch: std::as_const(channels)) {
-    //   ch->remove(m_account);
-    //   m_server->removeChannelIfEmpty(ch);
-    // }
-
+    m_account->onConnectionDisconnected(this, nick);
     emit disconnected(nick);
   }
 
@@ -784,9 +830,9 @@ namespace irc {
     }
 
     reply_num(1, "Hi, welcome to IRC");
-    reply_num(2, "Your host is " + Server::serverName() + ", running version qircd-0.1");
-    reply_num(3, "This server was created Dec  21 1989 at 13:37:00 (lie)");
-    reply_num(4, Server::serverName() + " wut-7.2.2+bla.7.3 what is this.");
+    reply_num(2, "Your host is " + ThreadedServer::serverName() + ", running version cIRCus-0.1");
+    reply_num(3, "This server was created Dec 21 1989 at 13:37:00 (lie)");
+    reply_num(4, ThreadedServer::serverName() + " wut-7.2.2+bla.7.3 what is this.");
 
     const QByteArray line = "005 " + nick + " BOT=b CASEMAPPING=ascii CHANNELLEN=64 CHANTYPES=# ELIST=U EXCEPTS EXTBAN=,m :are supported by this server";
     send_raw(line);
@@ -811,7 +857,7 @@ namespace irc {
       return;
     }
 
-    const auto arg = args.at(0);
+    const auto& arg = args.at(0);
     if (arg == "PLAIN") {
       send_raw("AUTHENTICATE +");
       return;
@@ -825,8 +871,8 @@ namespace irc {
       return;
     }
 
-    const QByteArray username = plain_spl.at(1);
-    const QByteArray password = plain_spl.at(2);
+    const QByteArray& username = plain_spl.at(1);
+    const QByteArray& password = plain_spl.at(2);
 
     const auto account = Account::get_by_name(username);
     if (!account.isNull()) {
@@ -854,8 +900,8 @@ namespace irc {
     m_socket->disconnectFromHost();
   }
 
-  void client_connection::handleMOTD(const QList<QByteArray> &) {
-    send_raw("375 " + nick + " :- " + m_server->serverName() + " Message of the day -");
+  void client_connection::handleMOTD(const QList<QByteArray> &) const {
+    send_raw("375 " + nick + " :- " + ThreadedServer::serverName() + " Message of the day -");
     send_raw("372 " + nick + " :- " + (m_server->motd().isEmpty() ? QByteArray("Welcome!") : m_server->motd()));
     send_raw("376 " + nick + " :End of MOTD command.");
   }
@@ -874,15 +920,22 @@ namespace irc {
       return;
     }
 
-    m_last_activity = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
+    m_last_activity = QDateTime::currentSecsSinceEpoch();
 
     const QByteArray& token = args.last();
-    const QByteArray out = "PONG " + m_server->serverName() + " :" + token + "\r\n";
-    m_socket->write(out);
+    const QByteArray out = "PONG " + ThreadedServer::serverName() + " :" + token + "\r\n";
+    emit sendData(out);
+  }
+
+  void client_connection::onWrite(const QByteArray &data) const {
+    if (!m_socket || !m_socket->isOpen() || !m_socket->isWritable())
+      return;
+
+    m_socket->write(data);
   }
 
   void client_connection::handlePONG(const QList<QByteArray> &) {
-    m_last_activity = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
+    m_last_activity = QDateTime::currentSecsSinceEpoch();
   }
 
   QList<QByteArray> client_connection::split_irc(const QByteArray &line) {
@@ -973,7 +1026,7 @@ namespace irc {
       reply_num(421, "Unknown command");
     }
 
-    m_last_activity = QDateTime::currentDateTimeUtc().toSecsSinceEpoch();
+    m_last_activity = QDateTime::currentSecsSinceEpoch();
   }
 
   client_connection::~client_connection() {

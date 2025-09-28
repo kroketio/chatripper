@@ -12,5 +12,6 @@ namespace g {
   QFileInfo pathDatabase;
   QFileInfo pathDatabasePreload;
   WebSessionStore* webSessions = nullptr;
+  QThread* mainThread = nullptr;
   Ctx* ctx = nullptr;
 }

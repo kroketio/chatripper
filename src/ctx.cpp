@@ -23,6 +23,7 @@ Ctx::Ctx() {
   createDefaultFiles();
 
   g::defaultHost = "kroket.io";
+  g::mainThread = QCoreApplication::instance()->thread();
 
   const bool preload = true;
   if (preload)
@@ -49,8 +50,15 @@ Ctx::Ctx() {
   SQL::account_get_all();  // trigger cache insertion
   CLOCK_MEASURE_END(start_init_db_preload, "initial db load");
 
+  // irc server - threadpool 4, max 5 connections per IP
+  irc_server = new irc::ThreadedServer(4, 10, this);
+
+  if (!irc_server->listen(QHostAddress::Any, 6667))
+    qFatal("Failed to start threaded server");  // @TODO: do something
+
   // web server
   m_web_thread = new QThread();
+  m_web_thread->setObjectName(QString("webserver"));
   web_server = new WebServer();
   web_server->setHost("0.0.0.0");
   web_server->setPort(3000);
@@ -185,10 +193,7 @@ void Ctx::createDefaultFiles() {
 }
 
 void Ctx::startIRC(const int port, const QByteArray& password) {
-  irc_server = new irc::Server(this);
-  if (!irc_server->start(port, password, "")) {
-    qCritical("Failed to start server on port %hu", port);
-  }
+  irc_server = new irc::ThreadedServer(4, 5);
 }
 
 void Ctx::createConfigDirectory(const QStringList &lst) {

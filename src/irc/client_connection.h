@@ -5,20 +5,22 @@
 #include <QTimer>
 #include <QSet>
 #include <QPointer>
+#include <QMutexLocker>
 #include <QElapsedTimer>
 #include <QHash>
 
 #include "lib/bitflags.h"
 #include "irc/caps.h"
 #include "irc/modes.h"
+#include "core/qtypes.h"
 
 class Channel;
 class Account;
 
 namespace irc {
-  class Server;
+  class ThreadedServer;
 
-  class client_connection : public QObject {
+  class client_connection final : public QObject {
     Q_OBJECT
 
   public:
@@ -28,8 +30,10 @@ namespace irc {
       USER         = 1 << 2
     };
 
-    client_connection(Server *server, QTcpSocket *socket);
+    explicit client_connection(ThreadedServer* server, QTcpSocket* socket, QObject* parent = nullptr);
     ~client_connection() override;
+
+    void handleConnection(const QHostAddress &peer_ip);
 
     Flags<ConnectionSetupTasks> setup_tasks;
     Flags<PROTOCOL_CAPABILITY> capabilities;
@@ -39,13 +43,13 @@ namespace irc {
       return user_modes.has(UserModes::BEEP_BOOP_BOT);
     }
 
-    QTcpSocket *m_socket;
+    QTcpSocket *m_socket = nullptr;
     bool logged_in = false;
 
     // disconnect slow setup/register
-    time_t time_connection_established() const { return m_time_connection_established; }
+    [[nodiscard]] time_t time_connection_established() const { return m_time_connection_established; }
     // disconnect slow activity
-    time_t time_last_activity() const { return m_last_activity; }
+    [[nodiscard]] time_t time_last_activity() const { return m_last_activity; }
 
     QByteArray nick;
     QByteArray user;
@@ -62,7 +66,7 @@ namespace irc {
     // QByteArray username() const { return user; }
     QByteArray host() const { return m_host; }
 
-    void send_raw(const QByteArray &line);
+    void send_raw(const QByteArray &line) const;
     void reply_num(int code, const QByteArray &text);
     void reply_self(const QByteArray &command, const QByteArray &args);
 
@@ -87,13 +91,18 @@ namespace irc {
     QByteArray prefix() const;
 
   signals:
+    void sendData(const QByteArray &data) const;
     void disconnected(const QByteArray &nick_to_delete);
 
   private slots:
     void onReadyRead();
     void onSocketDisconnected();
-
+  public slots:
+    void onWrite(const QByteArray &data) const;
   private:
+    mutable QMutex mtx_lock;
+    QTimer* m_inactivityTimer = nullptr;
+
     void parseIncoming(const QByteArray &line);
     void handlePASS(const QList<QByteArray> &args);
     void handleNICK(const QList<QByteArray> &args);
@@ -109,7 +118,7 @@ namespace irc {
     void handleLUSERS(const QList<QByteArray> &args);
     void handleMODE(const QList<QByteArray> &args);
     void handleCAP(const QList<QByteArray> &args);
-    void handleMOTD(const QList<QByteArray> &args);
+    void handleMOTD(const QList<QByteArray> &args) const;
     void handleAUTHENTICATE(const QList<QByteArray> &args);
     void handleWHOIS(const QList<QByteArray> &args);
     void handleWHO(const QList<QByteArray> &args);
@@ -117,8 +126,10 @@ namespace irc {
 
     void broadcastToChannel(Channel *ch, const QByteArray &command, const QByteArray &argtail, bool includeSelf);
 
-    Server *m_server;
+    ThreadedServer *m_server;
     QSharedPointer<Account> m_account;
+
+    QHostAddress m_remote;
 
     bool _is_setup = false;
 

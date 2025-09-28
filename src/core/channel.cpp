@@ -2,12 +2,12 @@
 
 #include "ctx.h"
 #include "lib/globals.h"
+#include "core/qtypes.h"
 
 Channel::Channel(const QByteArray &name, QObject *parent) : QObject(parent), m_name(name) {
   channel_modes.set(
     irc::ChannelModes::NO_OUTSIDE_MSGS,
-    irc::ChannelModes::TOPIC_PROTECTED
-  );
+    irc::ChannelModes::TOPIC_PROTECTED);
 }
 
 bool Channel::has(const QByteArray &username) const {
@@ -20,7 +20,10 @@ QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByt
   if (it != ctx->channels.end())
     return it.value();
 
-  QSharedPointer<Channel> channel = QSharedPointer<Channel>::create(name);
+  auto channel = QSharedPointer<Channel>(new Channel(name));
+  if (g::mainThread != QThread::currentThread())
+    channel->moveToThread(g::mainThread);
+
   channel->uid = id;
   channel->uid_str = Utils::uuidBytesToString(id).toUtf8();
   channel->setName(name);
@@ -34,6 +37,7 @@ QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByt
 }
 
 void Channel::part(QSharedPointer<Account> &account, const QByteArray &message) {
+  QWriteLocker locker(&mtx_lock);
   const auto chan_ptr = get(m_name);
   if (!m_members.contains(account))
     return;
@@ -57,6 +61,7 @@ void Channel::part(QSharedPointer<Account> &account, const QByteArray &message) 
 }
 
 void Channel::join(QSharedPointer<Account> &account) {
+  QWriteLocker locker(&mtx_lock);
   const auto chan_ptr = get(m_name);
 
   if (!m_members.contains(account)) {
@@ -84,6 +89,7 @@ void Channel::join(QSharedPointer<Account> &account) {
 }
 
 void Channel::setTopic(const QByteArray &t) {
+  QWriteLocker locker(&mtx_lock);
   if (m_topic != t) {
     m_topic = t;
     emit topicChanged(m_topic);
@@ -91,10 +97,12 @@ void Channel::setTopic(const QByteArray &t) {
 }
 
 void Channel::setName(const QByteArray &name) {
+  QWriteLocker locker(&mtx_lock);
   m_name = name;
 }
 
 void Channel::setKey(const QByteArray &k) {
+  QWriteLocker locker(&mtx_lock);
   if (m_key != k) {
     m_key = k;
     emit keyChanged(m_key);
@@ -112,6 +120,9 @@ QSharedPointer<Channel> Channel::get_or_create(const QByteArray &channel_name) {
 
   const auto channel = new Channel(channel_name);
 
+  if (g::mainThread != QThread::currentThread())
+    channel->moveToThread(g::mainThread);
+
   auto ptr = QSharedPointer<Channel>(channel);
 
   channels.insert(channel_name, ptr);
@@ -119,14 +130,17 @@ QSharedPointer<Channel> Channel::get_or_create(const QByteArray &channel_name) {
 }
 
 QSharedPointer<Account> Channel::accountOwner() const {
+  QReadLocker locker(&mtx_lock);
   return m_owner;
 }
 
 void Channel::setAccountOwner(const QSharedPointer<Account> &owner) {
+  QWriteLocker locker(&mtx_lock);
   m_owner = owner;
 }
 
 void Channel::onNickChanged(const QSharedPointer<Account> &acc, const QByteArray& old_nick, const QByteArray& new_nick, QSet<QSharedPointer<Account>> &broadcasted_accounts) {
+  QWriteLocker locker(&mtx_lock);
   for (const auto&_acc: m_members) {
     if (_acc == acc)
       continue;
@@ -143,6 +157,7 @@ void Channel::onNickChanged(const QSharedPointer<Account> &acc, const QByteArray
 }
 
 void Channel::addMembers(QList<QSharedPointer<Account>> accounts) {
+  QWriteLocker locker(&mtx_lock);
   for (const auto& acc: accounts) {
     m_members.append(acc);
     acc->channels[m_name] = g::ctx->channels[m_name];
@@ -154,6 +169,7 @@ void Channel::addMembers(QList<QSharedPointer<Account>> accounts) {
 }
 
 void Channel::addBan(const QByteArray &mask) {
+  QWriteLocker locker(&mtx_lock);
   if (!mask.isEmpty()) {
     m_ban_masks.insert(mask);
     // TODO: persist or notify members if desired
@@ -161,6 +177,7 @@ void Channel::addBan(const QByteArray &mask) {
 }
 
 void Channel::removeBan(const QByteArray &mask) {
+  QWriteLocker locker(&mtx_lock);
   if (!mask.isEmpty()) {
     m_ban_masks.remove(mask);
     // TODO: persist or notify members if desired
@@ -168,10 +185,12 @@ void Channel::removeBan(const QByteArray &mask) {
 }
 
 QList<QByteArray> Channel::banList() const {
+  QReadLocker locker(&mtx_lock);
   return m_ban_masks.values();
 }
 
 void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QMessage> &message) {
+  QReadLocker locker(&mtx_lock);
   if (g::ctx->snakepit->hasEventHandler(QIRCEvent::CHANNEL_MSG)) {
     auto res = g::ctx->snakepit->event(QIRCEvent::CHANNEL_MSG, this->to_variantmap(), from->to_variantmap(), message->to_variantmap());
     if (res.canConvert<QMessage>()) {
@@ -210,6 +229,7 @@ void Channel::message(const irc::client_connection *from_conn, const QSharedPoin
 }
 
 void Channel::setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg) {
+  QWriteLocker locker(&mtx_lock);
   using irc::ChannelModes;
 
   switch (mode) {

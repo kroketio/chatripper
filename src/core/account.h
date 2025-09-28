@@ -20,12 +20,13 @@
 
 class Channel;
 
-class Account : public QObject {
+class Account final : public QObject {
 Q_OBJECT
 
 public:
   explicit Account(const QByteArray& account_name = "", QObject* parent = nullptr);
   static QSharedPointer<Account> create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation);
+  static QSharedPointer<Account> create();
 
   QAuthUserResult verifyPassword(const QByteArray &password_candidate, const QHostAddress& ip) const;
 
@@ -59,8 +60,9 @@ public:
   }
   void setHost(const QByteArray &host);
 
-  [[nodiscard]] QByteArray prefix(const int conn_id = -1) {
-    if (connections.size() > 0 && conn_id != -1) {
+  [[nodiscard]] QByteArray prefix(const int conn_id = -1) const {
+    QReadLocker locker(&mtx_lock);
+    if (!connections.empty() && conn_id != -1) {
       const auto conn = connections.at(conn_id);
       return conn->prefix();
     }
@@ -77,6 +79,8 @@ public:
 
   void add_channel(const QByteArray &channel);
   void add_connection(irc::client_connection *ptr);
+  void onConnectionDisconnected(irc::client_connection *conn, const QByteArray &nick_to_delete);
+  void clearConnections();
   ~Account() override;
 
   QDateTime creation_date;
@@ -86,7 +90,6 @@ public:
 
 signals:
   void nickChanged(const QByteArray& old_nick, const QByteArray& new_nick);
-
 private:
   mutable QReadWriteLock mtx_lock;
 
