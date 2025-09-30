@@ -32,19 +32,19 @@ QAuthUserResult Account::verifyPassword(const QByteArray &password_candidate, co
     return rtn;
   }
 
-  // if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
-  //   const auto res = g::ctx->snakepit->event(
-  //     QIRCEvent::AUTH_SASL_PLAIN,
-  //     QString::fromUtf8(m_name),
-  //     QString::fromUtf8(password_candidate),
-  //     ip.toString());
-  //
-  //   if (res.canConvert<QAuthUserResult>())
-  //     return res.value<QAuthUserResult>();
-  //
-  //   rtn.reason = "application error";
-  //   return rtn;
-  // }
+  if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
+    const auto res = g::ctx->snakepit->event(
+      QIRCEvent::AUTH_SASL_PLAIN,
+      QString::fromUtf8(m_name),
+      QString::fromUtf8(password_candidate),
+      ip.toString());
+
+    if (res.canConvert<QAuthUserResult>())
+      return res.value<QAuthUserResult>();
+
+    rtn.reason = "application error";
+    return rtn;
+  }
 
   const std::string candidateStr = password_candidate.toStdString();
   const std::string pw = m_password.toStdString();

@@ -158,7 +158,7 @@ class Channel:
     name: str = ""
     topic: str = ""
     key: Optional[str] = None
-    account_owner_id: Optional[str] = None
+    owner: Optional[str] = None
     date_creation: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     # members: List["Account"] = field(default_factory=list)

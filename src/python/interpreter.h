@@ -16,6 +16,7 @@ Q_OBJECT
 public:
   explicit Snake(QObject *parent = nullptr);
   ~Snake() override;
+  QMutex mtx_interpreter;
 
   void setIndex(const int idx) { m_idx = idx; }
   [[nodiscard]] int idx() const { return m_idx; }

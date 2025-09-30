@@ -128,13 +128,13 @@ void SnakePit::calcActiveEvents() {
 }
 
 QVariant SnakePit::callFunctionList(const QString &funcName, const QVariantList &args) {
-  QMutexLocker locker(&mtx_snake);
   if (m_snakes.isEmpty())
     return {};
 
   const auto& ev = args.at(0);
   Snake *target = nullptr;
 
+  QMutexLocker locker(&mtx_snake);
   if (ev.canConvert<QIRCEvent>())
     if (const auto event = ev.value<QIRCEvent>(); m_activeExclusiveEvents.has(event))
       target = m_snakes[0];  // event is exclusive to interpreter 0
@@ -144,8 +144,11 @@ QVariant SnakePit::callFunctionList(const QString &funcName, const QVariantList 
     next_index = (next_index + 1) % static_cast<int>(m_snakes.size());
     target = m_snakes[idx];
   }
+  locker.unlock();
 
   QVariant returnValue;
+
+  QMutexLocker locker_interpreter(&target->mtx_interpreter);
   QMetaObject::invokeMethod(
     target,
     "executeFunction",
