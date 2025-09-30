@@ -18,6 +18,23 @@ from uuid import UUID, uuid4
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Callable, Set
 
+_INTERPRETER_IDX = -1
+_IS_DEBUG = False
+
+try:
+    from __main__ import snake
+    _IS_DEBUG = snake.is_debug()
+    _INTERPRETER_IDX = snake.interpreter_idx()
+except ImportError as ex:
+    print(ex)
+
+def QPrint(msg, file=sys.stdout):
+    if not _IS_DEBUG:
+        return
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    prefix = f"[{timestamp}][{_INTERPRETER_IDX}]"
+    print(prefix, msg, file=file)
+
 class QIRCModuleType(Enum):
     MODULE =      1 << 0
     BOT =         1 << 1
@@ -62,22 +79,24 @@ class QIRCModule:
     def __init__(self):
         self._enabled: bool = False
 
-    # lifecycle control
-    def enable(self):
-        if not self._enabled:
-            self._enabled = True
-            if getattr(self, 'init'):
-                self.init()
-
-    def disable(self):
-        if self._enabled:
-            self._enabled = False
-            if getattr(self, 'deinit'):
-                self.deinit()
-
     @property
     def enabled(self) -> bool:
         return self._enabled
+
+    @enabled.setter
+    def enabled(self, value: bool):
+        if self._enabled == value:
+            return
+
+        self._enabled = value
+        if value:
+            init = getattr(self, "init", None)
+            if callable(init):
+                init()
+        else:
+            deinit = getattr(self, "deinit", None)
+            if callable(deinit):
+                deinit()
 
     # introspection
     def describe(self) -> dict:
@@ -182,16 +201,22 @@ class User:
 
 class QIRC:
     _handlers = {}
-    _modules = {}
+    _modules: dict[str, QIRCModule] = {}
 
-    def call(self, event: QIRCEvent, *args, **kwargs):
+    def __init__(self):
+        _interpreter_idx: int = -1
+        _debug: bool = False
+
+    def call(self, event: "QIRCEvent", *args, **kwargs):
         ev = QIRCEvent(event)
 
         handlers = self._handlers.get(event)
         if not handlers:
-            print(f"Error: No handler for event {event}", file=sys.stderr)
+            if _IS_DEBUG:
+                QPrint(f"Error: No handler for event {event}", file=sys.stderr)
             return None
 
+        # normalize channel message args
         if ev is QIRCEvent.CHANNEL_MSG:
             chan_data, account_data, message = args
             chan = Channel(**chan_data)
@@ -203,23 +228,34 @@ class QIRC:
         for instance, func in handlers:
             if instance is None:
                 continue  # skip unbound handlers
+
+            # skip if module is disabled
+            if hasattr(instance, "enabled") and not instance.enabled:
+                if _IS_DEBUG:
+                    QPrint(f"skipping disabled module {instance.__class__.__name__}")
+                continue
+
             bound_handler = func.__get__(instance)
             result = bound_handler(*args, **kwargs)
+
             if result is None:
-                print("returning None")
+                if _IS_DEBUG:
+                    QPrint("returning None")
                 return result
+
         return result
 
     @classmethod
-    def on(cls, event: QIRCEvent):
-        """Decorator to register an event handler."""
+    def on(cls, event: "QIRCEvent", timeout: float = 1.5):
+        """Decorator to register an event handler with optional timeout."""
         def decorator(func):
             @wraps(func)
             def wrapper(*args, **kwargs):
                 return func(*args, **kwargs)
 
-            # mark wrapper for introspection
+            # attach metadata for later
             wrapper._qirc_event = event
+            wrapper._qirc_timeout = timeout
             wrapper._qirc_handler = True
             wrapper._qirc_original = func
 
@@ -239,29 +275,28 @@ class QIRC:
             self._handlers[event] = new_handlers
 
     @classmethod
-    def list_modules(cls) -> dict:
-        """Return descriptions of all registered modules."""
+    def list_modules(cls) -> dict[str, str]:
         return {name: mod.describe() for name, mod in cls._modules.items()}
 
     @classmethod
     def enable_module(cls, name: str):
-        """Enable a registered module by name."""
         if name not in cls._modules:
             raise KeyError(f"Module '{name}' is not registered.")
-        cls._modules[name].enable()
+        cls._modules[name].enabled = True
 
     @classmethod
     def disable_module(cls, name: str):
-        """Disable a registered module by name."""
         if name not in cls._modules:
             raise KeyError(f"Module '{name}' is not registered.")
-        cls._modules[name].disable()
+        cls._modules[name].enabled = False
 
     @classmethod
     def interpreter_idx(cls) -> int:
-        """Returns the interpreter idx"""
-        import __main__
-        return getattr(__main__, "INTERPRETER_IDX", -1)
+        return _INTERPRETER_IDX
+
+    @classmethod
+    def is_debug(cls) -> bool:
+        return _IS_DEBUG
 
 qirc = QIRC()
 __qirc_call = lambda *args, **kwargs: qirc.call(*args, **kwargs)

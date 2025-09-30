@@ -19,22 +19,28 @@ struct ThreadInterp {
 
 static PyObject *py_get_channels(PyObject *self, PyObject *args);
 static PyObject *py_get_accounts(PyObject *self, PyObject *args);
+static PyObject *py_is_debug(PyObject *self, PyObject *args);
+static PyObject *py_interpreter_idx(PyObject *self, PyObject *args);
 
 static PyMethodDef SnakeMethods[] = {
     {"get_accounts", py_get_accounts, METH_VARARGS, "Get accounts by UUIDs"},
     {"get_channels", py_get_channels, METH_VARARGS, "Get channels by UUIDs"},
+    {"is_debug", py_is_debug, METH_NOARGS, "Returns True if compiled in debug mode"},
+    {"interpreter_idx", py_interpreter_idx, METH_NOARGS, "Returns the Snake interpreter index"},
     {nullptr, nullptr, 0, nullptr} // sentinel
 };
 
 static struct PyModuleDef SnakeModule = {
     PyModuleDef_HEAD_INIT,
-    "snake", // module name
+    "snake",
     "Snake C++ module",
     -1,
     SnakeMethods
 };
 
-Snake::Snake(QObject *parent) : QObject(parent), interp_(nullptr) {}
+Snake::Snake(QObject *parent) :
+  QObject(parent), interp_(nullptr) {
+}
 
 void Snake::start() {
   PyInterpreterConfig config{};
@@ -67,11 +73,6 @@ void Snake::start() {
   PyObject *main_module = PyImport_AddModule("__main__");
   PyObject *main_dict = PyModule_GetDict(main_module);
 
-  // inject interpreter idx
-  PyObject* pyIdx = PyLong_FromLong(m_idx);  // idx_ is the Snake interpreter index
-  PyDict_SetItemString(main_dict, "INTERPRETER_IDX", pyIdx);
-  Py_DECREF(pyIdx);
-
   // inject snake module
   PyObject *pyModule = PyModule_Create(&SnakeModule);
   if (!pyModule) {
@@ -80,14 +81,12 @@ void Snake::start() {
     return;
   }
 
+  PyModule_AddObject(pyModule, "_cpp_instance", PyCapsule_New(this, "SnakePtr", nullptr));
   PyDict_SetItemString(main_dict, "snake", pyModule);
 
-#ifdef DEBUG
-  const QString modulePath = "/home/dsc/CLionProjects/chat/server/data/scripts/";
-#else
   const QString modulePath = g::pythonModulesDirectory;
-#endif
-  PyRun_SimpleString(QString("import sys; sys.path.append('%1'); from qircd import __qirc_call").arg(modulePath).toUtf8().constData());
+  PyRun_SimpleString(
+      QString("import sys; sys.path.append('%1'); from qircd import __qirc_call").arg(modulePath).toUtf8().constData());
 
   // load user modules
   QDir dir(modulePath);
@@ -116,7 +115,7 @@ void Snake::start() {
   // release GIL
   interp_->tstate = PyEval_SaveThread();
 
-  qDebug() << QString("Python interpreter %1 initialized").arg(m_idx);
+  qDebug() << QString("Python interpreter %1 initialized").arg(QString::number(idx));
   emit started(true);
 }
 
@@ -126,10 +125,10 @@ QHash<QByteArray, QSharedPointer<ModuleClass>> Snake::listModules() const {
 
   PyEval_RestoreThread(interp_->tstate);
 
-  PyObject* main_module = PyImport_AddModule("__main__");
-  PyObject* main_dict = PyModule_GetDict(main_module);
+  PyObject *main_module = PyImport_AddModule("__main__");
+  PyObject *main_dict = PyModule_GetDict(main_module);
 
-  PyObject* result = PyRun_String("qirc.list_modules()", Py_eval_input, main_dict, main_dict);
+  PyObject *result = PyRun_String("qirc.list_modules()", Py_eval_input, main_dict, main_dict);
 
   QHash<QByteArray, QSharedPointer<ModuleClass>> modules;
   if (result) {
@@ -140,7 +139,7 @@ QHash<QByteArray, QSharedPointer<ModuleClass>> Snake::listModules() const {
 
     Py_DECREF(result);
   } else {
-    qWarning() << "Failed to list modules in interpreter" << m_idx;
+    qWarning() << "Failed to list modules in interpreter" << idx;
   }
 
   interp_->tstate = PyEval_SaveThread();
@@ -221,9 +220,11 @@ Snake::~Snake() {
   }
 }
 
+// has initial support for asyncio
 QVariant Snake::executeFunction(const QString &funcName, const QVariantList &args) const {
-  qDebug() << "Python call in interpreter" << m_idx << args;
+  qDebug() << "Python call in interpreter" << idx << args;
   QVariant result;
+
   if (!interp_) {
     qWarning() << "Interpreter not initialized";
     return result;
@@ -235,25 +236,69 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
   PyObject *main_dict = PyModule_GetDict(main_module);
   PyObject *pyFunc = PyDict_GetItemString(main_dict, funcName.toUtf8().constData());
 
-  if (pyFunc && PyCallable_Check(pyFunc)) {
-    PyObject *pyArgs = PyTuple_New(args.size());
-    for (int i = 0; i < args.size(); ++i) {
-      PyObject *pyObj = QVariantToPyObject(args[i]);
-      PyTuple_SetItem(pyArgs, i, pyObj); // steals reference
-    }
+  if (!pyFunc || !PyCallable_Check(pyFunc)) {
+    qWarning() << "Python function not found or not callable:" << funcName;
+    interp_->tstate = PyEval_SaveThread();
+    return result;
+  }
 
-    PyObject *pyResult = PyObject_CallObject(pyFunc, pyArgs);
-    Py_DECREF(pyArgs);
+  // build argument tuple
+  PyObject *pyArgs = PyTuple_New(args.size());
+  for (int i = 0; i < args.size(); ++i) {
+    PyObject *pyObj = QVariantToPyObject(args[i]);
+    PyTuple_SetItem(pyArgs, i, pyObj); // steals reference
+  }
 
-    if (pyResult) {
-      result = PyObjectToQVariant(pyResult);
-      Py_DECREF(pyResult);
-    } else {
+  // call function
+  PyObject *pyResult = PyObject_CallObject(pyFunc, pyArgs);
+  Py_DECREF(pyArgs);
+
+  if (!pyResult) {
+    PyErr_Print();
+    qWarning() << "Python function call failed:" << funcName;
+    interp_->tstate = PyEval_SaveThread();
+    return result;
+  }
+
+  // handle async functions
+  if (PyCoro_CheckExact(pyResult)) {
+    PyObject *asyncio = PyImport_ImportModule("asyncio");
+    if (!asyncio) {
       PyErr_Print();
-      qWarning() << "Python function call failed:" << funcName;
+      qWarning() << "Failed to import asyncio";
+      Py_DECREF(pyResult);
+      interp_->tstate = PyEval_SaveThread();
+      return result;
     }
+
+    PyObject *runFunc = PyObject_GetAttrString(asyncio, "run");
+    Py_DECREF(asyncio);
+
+    if (!runFunc || !PyCallable_Check(runFunc)) {
+      PyErr_Print();
+      qWarning() << "asyncio.run not callable";
+      Py_XDECREF(runFunc);
+      Py_DECREF(pyResult);
+      interp_->tstate = PyEval_SaveThread();
+      return result;
+    }
+
+    PyObject *awaited = PyObject_CallFunctionObjArgs(runFunc, pyResult, NULL);
+    Py_DECREF(runFunc);
+    Py_DECREF(pyResult);
+
+    if (!awaited) {
+      PyErr_Print();
+      qWarning() << "Async function call failed:" << funcName;
+      interp_->tstate = PyEval_SaveThread();
+      return result;
+    }
+
+    result = PyObjectToQVariant(awaited);
+    Py_DECREF(awaited);
   } else {
-    qWarning() << "Python function not found:" << funcName;
+    result = PyObjectToQVariant(pyResult);
+    Py_DECREF(pyResult);
   }
 
   interp_->tstate = PyEval_SaveThread();
@@ -261,7 +306,6 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
 }
 
 static PyObject *py_get_accounts(PyObject *self, PyObject *args) {
-  CLOCK_MEASURE_START(wow);
   PyObject *pyList;
   if (!PyArg_ParseTuple(args, "O!", &PyList_Type, &pyList)) {
     return nullptr;
@@ -290,8 +334,31 @@ static PyObject *py_get_accounts(PyObject *self, PyObject *args) {
     PyList_SetItem(pyResult, i, pyDict); // steals reference
   }
 
-  CLOCK_MEASURE_END(wow, "wowowowow");
   return pyResult;
+}
+
+static PyObject *py_is_debug(PyObject *self, PyObject *args) {
+#ifdef DEBUG
+  Py_RETURN_TRUE;
+#else
+  Py_RETURN_FALSE;
+#endif
+}
+
+static PyObject *py_interpreter_idx(PyObject *self, PyObject *args) {
+  PyObject *capsule = PyObject_GetAttrString(self, "_cpp_instance");
+  if (!capsule) {
+    PyErr_SetString(PyExc_RuntimeError, "C++ instance not found");
+    return nullptr;
+  }
+
+  const auto *snake = reinterpret_cast<Snake *>(PyCapsule_GetPointer(capsule, "SnakePtr"));
+  if (!snake) {
+    PyErr_SetString(PyExc_RuntimeError, "Failed to get C++ instance");
+    return nullptr;
+  }
+
+  return PyLong_FromLong(snake->idx);
 }
 
 static PyObject *py_get_channels(PyObject *self, PyObject *args) {

@@ -17,9 +17,7 @@ public:
   explicit Snake(QObject *parent = nullptr);
   ~Snake() override;
   QMutex mtx_interpreter;
-
-  void setIndex(const int idx) { m_idx = idx; }
-  [[nodiscard]] int idx() const { return m_idx; }
+  int idx = -1;
 
   [[nodiscard]] QHash<QByteArray, QSharedPointer<ModuleClass>> listModules() const;
 
@@ -46,7 +44,6 @@ signals:
 
 private:
   ThreadInterp* interp_;
-  int m_idx = -1;
 
   // used by variadic template (callFunction())
   QVariant callFunctionList(const QString &funcName, const QVariantList &args);

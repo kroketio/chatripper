@@ -10,7 +10,7 @@ SnakePit::SnakePit(QObject *parent) : QObject(parent), m_started_counter(0), nex
     auto *thread = new QThread(this);
     thread->setObjectName(QString("python_interpreter-%1").arg(QString::number(i+1)));
     const auto snake = new Snake();
-    snake->setIndex(i);
+    snake->idx = i;
     snake->moveToThread(thread);
 
     // track started interpreters

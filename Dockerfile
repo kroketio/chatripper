@@ -36,7 +36,7 @@ RUN /opt/venv/bin/python -m ensurepip --upgrade
 RUN /opt/venv/bin/pip install --upgrade pip
 
 # install aqtinstall inside venv
-RUN /opt/venv/bin/pip install aqtinstall==3.3.0
+RUN /opt/venv/bin/pip install aqtinstall==3.3.0 requests
 
 # Qt to /opt/qt/
 RUN /opt/venv/bin/aqt install-qt linux desktop 6.9.1 linux_gcc_64 \

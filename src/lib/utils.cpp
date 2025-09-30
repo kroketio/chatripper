@@ -11,7 +11,7 @@ void Utils::init() {
   g::configRoot = QDir::homePath();
   g::homeDir = QDir::homePath();
   // g::configDirectory = QString("%1/.config/%2/").arg(g::configRoot, QCoreApplication::applicationName());
-  g::configDirectory = "/home/dsc/CLionProjects/chat/server/data/";
+  g::configDirectory = g::configDirectory = QDir(QDir::currentPath()).filePath("data/");
   g::pythonModulesDirectory = g::configDirectory + "scripts/";
   g::uploadsDirectory = g::configDirectory + "uploads/";
   g::cacheDirectory = QString("%1/cache").arg(g::configDirectory);
