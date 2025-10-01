@@ -1,3 +1,0 @@
-#pragma once
-
-#define CIRCUS_VERSION "@CMAKE_PROJECT_VERSION@"

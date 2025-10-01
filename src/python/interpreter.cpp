@@ -9,6 +9,7 @@
 #include <QFile>
 
 #include "ctx.h"
+#include "config-circa.h"
 #include "lib/utils.h"
 #include "lib/logger_std/logger_std.h"
 #include "python/utils.h"
@@ -20,6 +21,7 @@ struct ThreadInterp {
 static PyObject *py_get_channels(PyObject *self, PyObject *args);
 static PyObject *py_get_accounts(PyObject *self, PyObject *args);
 static PyObject *py_is_debug(PyObject *self, PyObject *args);
+static PyObject *py_version(PyObject *self, PyObject *args);
 static PyObject *py_interpreter_idx(PyObject *self, PyObject *args);
 
 static PyMethodDef SnakeMethods[] = {
@@ -27,6 +29,7 @@ static PyMethodDef SnakeMethods[] = {
     {"get_channels", py_get_channels, METH_VARARGS, "Get channels by UUIDs"},
     {"is_debug", py_is_debug, METH_NOARGS, "Returns True if compiled in debug mode"},
     {"interpreter_idx", py_interpreter_idx, METH_NOARGS, "Returns the Snake interpreter index"},
+    {"version", py_version, METH_NOARGS, "Returns cIRCa version"},
     {nullptr, nullptr, 0, nullptr} // sentinel
 };
 
@@ -138,8 +141,6 @@ QHash<QByteArray, QSharedPointer<ModuleClass>> Snake::listModules() const {
       modules.insert(it.key().toUtf8(), ModuleClass::create_from_json(it.value().toObject()));
 
     Py_DECREF(result);
-  } else {
-    qWarning() << "Failed to list modules in interpreter" << idx;
   }
 
   interp_->tstate = PyEval_SaveThread();
@@ -345,6 +346,10 @@ static PyObject *py_is_debug(PyObject *self, PyObject *args) {
 #endif
 }
 
+static PyObject *py_version(PyObject *self, PyObject *args) {
+  return PyUnicode_FromString(CIRCA_VERSION);
+}
+
 static PyObject *py_interpreter_idx(PyObject *self, PyObject *args) {
   PyObject *capsule = PyObject_GetAttrString(self, "_cpp_instance");
   if (!capsule) {
@@ -352,7 +357,7 @@ static PyObject *py_interpreter_idx(PyObject *self, PyObject *args) {
     return nullptr;
   }
 
-  const auto *snake = reinterpret_cast<Snake *>(PyCapsule_GetPointer(capsule, "SnakePtr"));
+  const auto *snake = static_cast<Snake *>(PyCapsule_GetPointer(capsule, "SnakePtr"));
   if (!snake) {
     PyErr_SetString(PyExc_RuntimeError, "Failed to get C++ instance");
     return nullptr;

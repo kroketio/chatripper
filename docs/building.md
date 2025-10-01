@@ -2,7 +2,7 @@
 
 ### Requirements
 
-cIRCus runs exclusively on Linux. On an Ubuntu based system, the system dependencies 
+cIRCa runs exclusively on Linux. On an Ubuntu based system, the system dependencies 
 you can install are:
 
 ```bash
@@ -33,7 +33,7 @@ sudo make -Cbuild -j4 install
 
 ### Compilation
 
-Using CMake we'll do an out-of-tree build. Move to the cIRCus root directory and:
+Using CMake we'll do an out-of-tree build. Move to the cIRCa root directory and:
 
 ```bash
 cmake -Bbuild .
@@ -54,4 +54,4 @@ make -Cbuild -j6
 
 ### Running
 
-The `circus` executable will be placed in `build/bin/`
+The `cIRCa` executable will be placed in `build/bin/`

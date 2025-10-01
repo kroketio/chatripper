@@ -1,4 +1,4 @@
-## cIRCus
+## cIRCa
 
 Self-hosted, open-source, performant chat server.
 
@@ -18,7 +18,6 @@ Work in progress.
 - SQL backend (sqlite)
 - Embedded [Meilisearch](https://github.com/meilisearch/meilisearch/) for full-text searches
 - audio/video calls
-- Easy to install
 - Easy to configure
 - Runs on a potato
 

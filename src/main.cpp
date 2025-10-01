@@ -1,3 +1,4 @@
+#include <csignal>
 #include <Python.h>
 
 #include "irc/modes.h"
@@ -13,6 +14,10 @@
 #include "ctx.h"
 
 int main(int argc, char *argv[]) {
+  auto byebye = [](int){ QCoreApplication::quit(); };
+  std::signal(SIGINT, byebye);
+  std::signal(SIGTERM, byebye);
+
   irc::initializeUserModesLookup();
   irc::initializeChannelModesLookup();
 

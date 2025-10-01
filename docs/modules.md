@@ -31,16 +31,16 @@ qirc.register_module(my_mod)
 
 ## Concurrency
 
-cIRCus runs `x` independent Python interpreters in a thread pool, each with its own Global Interpreter Lock (GIL), as described in [PEP 684](https://peps.python.org/pep-0684/).
+cIRCa runs `x` independent Python interpreters in a thread pool, each with its own Global Interpreter Lock (GIL), as described in [PEP 684](https://peps.python.org/pep-0684/).
 
 Because each interpreter is isolated, your module is loaded separately 
-into every instance. cIRCus automatically selects which interpreter to use for each call (currently via round-robin).
+into every instance. cIRCa automatically selects which interpreter to use for each call (currently via round-robin).
 
 ### Preserving state
 
 Some modules need to **maintain state** between calls. For example, a module implementing a “slowmode” feature must track when each participant last sent a message to enforce a cooldown period.
 
-Because each Python interpreter in cIRCus is **isolated**, your module’s state exists separately in every interpreter. To maintain consistent state, you can **pin the module to a single interpreter**, ensuring all stateful operations happen in the same context.
+Because each Python interpreter in cIRCa is **isolated**, your module’s state exists separately in every interpreter. To maintain consistent state, you can **pin the module to a single interpreter**, ensuring all stateful operations happen in the same context.
 
 #### Cooldown module example
 

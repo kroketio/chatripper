@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
-project(circus
+project(circa
     VERSION "0.0.1"
-    DESCRIPTION "circus"
+    DESCRIPTION "circa"
     LANGUAGES CXX C
 )
 
@@ -22,7 +22,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FindCcache)
 
-configure_file("cmake/config-circus.h.cmake" "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/config-circus.h")
+configure_file("cmake/config-circa.h.cmake" "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/config-circa.h")
 
 # https://github.com/kroketio/libminisign
 find_package(minisign REQUIRED)
@@ -58,13 +58,13 @@ file(GLOB SOURCE_FILES
 
 add_subdirectory(src/lib/logger_std)
 
-add_executable(circus
+add_executable(circa
     src/main.cpp
     ${SOURCE_FILES}
 )
 
 if(ENABLE_DEBUG_TIMINGS)
-    target_compile_definitions(circus
+    target_compile_definitions(circa
         PUBLIC
         ENABLE_DEBUG_TIMINGS=1
     )
@@ -72,15 +72,15 @@ endif()
 
 if(DEBUG)
     message(STATUS "DEBUG BUILD")
-    target_compile_definitions(circus PRIVATE DEBUG=1)
+    target_compile_definitions(circa PRIVATE DEBUG=1)
 endif()
 
-target_include_directories(circus PRIVATE
+target_include_directories(circa PRIVATE
     src
     src/lib
     ${RapidJSON_INCLUDE_DIRS})
 
-target_link_libraries(circus PRIVATE
+target_link_libraries(circa PRIVATE
     Qt6::Core
     Qt6::Network
     Qt6::Gui
@@ -92,7 +92,7 @@ target_link_libraries(circus PRIVATE
     minisign::minisign
 )
 
-set_target_properties(circus PROPERTIES
+set_target_properties(circa PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     LINK_FLAGS_RELEASE -s
 )
