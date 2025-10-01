@@ -3,7 +3,7 @@
 
 RateLimiter::RateLimiter(const int max_requests, const int window_seconds) : m_maxRequests(max_requests), m_windowSeconds(window_seconds) {}
 
-RateLimitResult RateLimiter::check(const QHostAddress &addr) {
+RateLimitResult RateLimiter::check(const QHostAddress &addr, const QString &msg) {
   const QString key = addr.toString();
   QMutexLocker locker(&m_mutex);
 
@@ -15,7 +15,7 @@ RateLimitResult RateLimiter::check(const QHostAddress &addr) {
     e.count = 1;
     e.windowStart = now;
     m_table.insert(key, e);
-    return {true, {}};
+    return {true, {}, {}};
   }
 
   Entry &e = it.value();
@@ -25,15 +25,17 @@ RateLimitResult RateLimiter::check(const QHostAddress &addr) {
     // reset window
     e.count = 1;
     e.windowStart = now;
-    return {true, {}};
+    return {true, {}, {}};
   }
 
   if (e.count < m_maxRequests) {
     e.count++;
-    return {true, {}};
+    return {true, {}, {}};
   }
 
   // rate limit exceeded, calculate retry time
   const QDateTime retry = e.windowStart.addSecs(m_windowSeconds);
-  return {false, retry};
+
+  const qint64 seconds = QDateTime::currentDateTimeUtc().secsTo(retry);
+  return {false, retry, msg.arg(QString::number(seconds))};
 }

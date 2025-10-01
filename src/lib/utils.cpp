@@ -14,6 +14,7 @@ void Utils::init() {
   g::configDirectory = g::configDirectory = QDir(QDir::currentPath()).filePath("data/");
   g::pythonModulesDirectory = g::configDirectory + "scripts/";
   g::uploadsDirectory = g::configDirectory + "uploads/";
+  g::staticDirectory = g::configDirectory + "static/";
   g::cacheDirectory = QString("%1/cache").arg(g::configDirectory);
   g::pathDatabase = QFileInfo(g::configDirectory + "db.sqlite3");
   g::pathDatabasePreload = QFileInfo(g::configDirectory + "preload.json");

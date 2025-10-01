@@ -40,12 +40,8 @@ void install(QHttpServer *server, RateLimiter *limiter) {
     const QHostAddress ip = ipFromRequest(request);
 
     QFuture<QHttpServerResponse> future = QtConcurrent::run([&request, ip, limiter]() {
-      // rate limit by IP
-      if (auto [allowed, retryAfter] = limiter->check(ip); !allowed) {
-        const qint64 seconds = QDateTime::currentDateTimeUtc().secsTo(retryAfter);
-        const QString msg = QString("Too many logins, retry after %1 seconds").arg(QString::number(seconds));
+      if (auto [allowed, retryAfter, msg] = limiter->check(ip, "Too many logins, retry after %1 seconds"); !allowed)
         return QHttpServerResponse(msg, QHttpServerResponder::StatusCode::TooManyRequests);
-      }
 
       // expect JSON body
       const QByteArray body = request.body();

@@ -73,12 +73,9 @@ void install(QHttpServer *server, RateLimiter *limiter) {
     const QString contentDisposition = QString::fromUtf8(request.headers().value("Content-Disposition"));
 
     QFuture<QHttpServerResponse> future = QtConcurrent::run([body, limiter, ip, cookieHeaders, contentType, contentDisposition, &request]() {
-      // rate limit by IP
-      if (auto [allowed, retryAfter] = limiter->check(ip); !allowed) {
-        const qint64 seconds = QDateTime::currentDateTimeUtc().secsTo(retryAfter);
-        const QString msg = QString("Too many requests, retry after %1 seconds").arg(QString::number(seconds));
+      // rate limit
+      if (auto [allowed, retryAfter, msg] = limiter->check(ip, "Too many requests, retry after %1 seconds"); !allowed)
         return QHttpServerResponse(msg, QHttpServerResponder::StatusCode::TooManyRequests);
-      }
 
       const auto current_user = g::webSessions->get_user(request);
       if (current_user.isNull())
@@ -135,11 +132,14 @@ void install(QHttpServer *server, RateLimiter *limiter) {
   // GET /files/<arg> - serve uploaded file
   server->route("/files/<arg>", QHttpServerRequest::Method::Get, [](QString arg) {
     QFuture<QHttpServerResponse> future = QtConcurrent::run([arg]() {
-      const QString safeFile = QFileInfo(arg).fileName();
-      const QRegularExpression validName("^[A-Za-z0-9._-]+$");
-      if (!validName.match(safeFile).hasMatch()) {
+      QString safePath;
+      if (!sanitizePath(arg, safePath))
         return QHttpServerResponse("Invalid filename", QHttpServerResponder::StatusCode::BadRequest);
-      }
+      const QString safeFile = QFileInfo(safePath).fileName();
+
+      const QRegularExpression validName("^[A-Za-z0-9._-]+$");
+      if (!validName.match(safeFile).hasMatch())
+        return QHttpServerResponse("Invalid filename", QHttpServerResponder::StatusCode::BadRequest);
 
       const QString filePath = g::uploadsDirectory + "/" + safeFile;
       if (!QFile::exists(filePath))
@@ -154,7 +154,11 @@ void install(QHttpServer *server, RateLimiter *limiter) {
   // HEAD /files/<arg> - describe uploaded file
   server->route("/files/<arg>", QHttpServerRequest::Method::Head, [](QString arg) {
     QFuture<QHttpServerResponse> future = QtConcurrent::run([arg]() {
-      const QString safeFile = QFileInfo(arg).fileName();
+      QString safePath;
+      if (!sanitizePath(arg, safePath))
+        return QHttpServerResponse("Invalid filename", QHttpServerResponder::StatusCode::BadRequest);
+      const QString safeFile = QFileInfo(safePath).fileName();
+
       const QString filePath = g::uploadsDirectory + "/" + safeFile;
 
       if (!QFile::exists(filePath))

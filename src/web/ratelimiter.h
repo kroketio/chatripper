@@ -7,12 +7,13 @@
 struct RateLimitResult {
   bool allowed;
   QDateTime retryAfter;
+  QString msg;
 };
 
 class RateLimiter {
 public:
   RateLimiter(int max_requests = 5, int window_seconds = 60);
-  RateLimitResult check(const QHostAddress &addr);
+  RateLimitResult check(const QHostAddress &addr, const QString &msg);
 private:
   struct Entry {
     int count = 0;

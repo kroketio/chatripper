@@ -8,6 +8,7 @@ namespace g {
   QString pythonModulesDirectory;
   QString uploadsDirectory;
   QString cacheDirectory;
+  QString staticDirectory;
   QByteArray defaultHost;
   QFileInfo pathDatabase;
   QFileInfo pathDatabasePreload;

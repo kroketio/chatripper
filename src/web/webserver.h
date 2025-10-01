@@ -34,6 +34,7 @@ private:
 
   RateLimiter* m_loginRateLimiter = nullptr;
   RateLimiter* m_uploadRateLimiter = nullptr;
+  RateLimiter* m_webRateLimiter = nullptr;
 
   void registerRoutes();
 };

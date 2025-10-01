@@ -15,6 +15,7 @@
 #include "web/routes/channelsroute.h"
 #include "web/routes/uploadroute.h"
 #include "web/routes/user.h"
+#include "web/routes/static.h"
 
 #include "lib/utils.h"
 
@@ -23,6 +24,7 @@ WebServer::WebServer(QObject *parent) : QObject(parent),
     m_tcp_server(new QTcpServer(this)) {
   m_loginRateLimiter = new RateLimiter(3, 5);
   m_uploadRateLimiter = new RateLimiter(3, 5);
+  m_webRateLimiter = new RateLimiter(10, 1);
   if (g::webSessions == nullptr)
     g::webSessions = new WebSessionStore();
   registerRoutes();
@@ -50,17 +52,11 @@ void WebServer::registerRoutes() {
     return QStringLiteral("Hello from QHttpServer (Qt6)");
   });
 
-  // login route (delegates to routes/authroute)
   AuthRoute::install(m_server, m_loginRateLimiter);
-
-  // channels
   ChannelsRoute::install(m_server);
-
-  // users
   UsersRoute::install(m_server);
-
-  // upload route (requires valid session)
   UploadRoute::install(m_server, m_uploadRateLimiter);
+  StaticRoute::install(m_server, m_uploadRateLimiter);
 }
 
 void WebServer::stop() {

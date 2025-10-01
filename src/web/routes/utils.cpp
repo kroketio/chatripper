@@ -43,3 +43,17 @@ QString tokenFromCookies(const QStringList &cookies) {
   }
   return {};
 }
+
+QString detectMimeType(const QString &filePath) {
+  const QMimeDatabase db;
+  const QMimeType mime = db.mimeTypeForFile(filePath);
+
+  QString mimeType = mime.isValid() ? mime.name() : "application/octet-stream";
+
+  // force text/html
+  if (filePath.endsWith(".html", Qt::CaseInsensitive)) {
+    mimeType = "text/html; charset=utf-8";
+  }
+
+  return mimeType;
+}
