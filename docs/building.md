@@ -1,5 +1,9 @@
 ## Building
 
+- Platform(s) supported: Linux x86/64, ARM64
+- Dependencies: Qt6, Python >= 3.13, rapidjson
+- Build dependencies: CMake, C++17
+
 ### Requirements
 
 cIRCa runs exclusively on Linux. On an Ubuntu based system, the system dependencies 

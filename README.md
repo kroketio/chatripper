@@ -1,25 +1,29 @@
-## cIRCa
+# cIRCa
 
-Self-hosted, open-source, performant chat server.
+cIRCA is a modern approach to IRC, reimagining the protocol, server architecture, and client features
+from the ground up. Our focus is **solving real-world challenges**, while remaining compatible
+with existing clients.
 
-Work in progress.
+**Work in progress**
 
-- IRCv3 based
-  - backward compatible with old IRC clients
-- account based (SASL login)
-  - allow multiple clients per account
-  - always-on functionality
-- scrollbacks/history
-- realm based ('create servers')
-- allow anonymous logins
-- CPython integration for server-side scripting
-- web invites
-- admin web-interface, API
-- SQL backend (sqlite)
-- Embedded [Meilisearch](https://github.com/meilisearch/meilisearch/) for full-text searches
-- audio/video calls
-- Easy to configure
-- Runs on a potato
+## Design philosophy
+
+* A strong focus on utility, practicality, and serviceability
+* Embrace modern chat features like accounts, history, metadata, previews, video/audio calls
+* High customizability via an admin web-interface (no messing around in config files)
+* Server-side scripting with Python
+* Integrated web chat client
+* REST API
+
+## Performance
+
+cIRCa is designed to operate primarily in memory. It is both multithreaded and 
+asynchronous, and while we haven’t tested it, we are confident it can handle thousands 
+of concurrent connections.
+
+We regularly benchmark key parts of the code to ensure optimal performance. I/O operations are 
+queued whenever possible, and concurrency is prioritized to deliver a fast, responsive chat 
+experience - low-powered hardware included.
 
 ## Server-side scripting
 
@@ -45,13 +49,20 @@ class MyModule(QIRCModule):
 
 More info [docs/modules.md](docs/modules.md)
 
-## Requirements
+## Quick start guide
 
-- Platform(s) supported: Linux x86/64, ARM64
-- Dependencies: Qt6, Python >= 3.13, rapidjson
-- Build dependencies: CMake, C++17
+```bash
+docker compose build --no-cache
+docker compose run --rm circa
+```
 
-See [docs/building.md](docs/building.md)
+Visit the web-interface over at [http://127.0.0.1:3000](http://127.0.0.1:3000).
+
+For more information about Docker: [docs/docker.md](docs/docker.md)
+
+### Compiling
+
+[docs/building.md](docs/building.md).
 
 ## Testimonials
 
