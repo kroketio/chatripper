@@ -1,24 +1,28 @@
 {
+  "servers": [
+    {
+      "name": "master"
+    }
+  ],
   "users": [
     {
-      "name": "admin",
-      "password": "admin"
-    },
-    {
       "name": "dsc",
-      "password": "dsc"
+      "password": "dsc",
+      "server": "master"
     }
   ],
   "channels": [
     {
-      "name": "admin",
+      "name": "admin_channel",
       "owner": "dsc",
+      "server": "master",
       "members": ["admin"],
       "topic": "the admin channel"
     },
     {
       "name": "test",
       "owner": "dsc",
+      "server": "master",
       "members": ["dsc", "admin"],
       "topic": "the test channel!"
     }

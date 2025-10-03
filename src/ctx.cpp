@@ -239,7 +239,65 @@ QList<QSharedPointer<Account>> Ctx::get_accounts_ordered() const {
   return list;
 }
 
+void Ctx::permission_insert_cache(const QSharedPointer<Permission>& ptr) {
+  QWriteLocker locker(&mtx_cache);
+  permissions << ptr;
+  permissions_lookup_uuid[ptr->uid()] = ptr;
+}
 
+void Ctx::permission_remove_cache(const QSharedPointer<Permission>& ptr) {
+  if (ptr.isNull()) return;
+  QWriteLocker locker(&mtx_cache);
+  permissions.remove(ptr);
+  permissions_lookup_uuid.remove(ptr->uid());
+}
+
+void Ctx::server_insert_cache(const QSharedPointer<Server>& ptr) {
+  QWriteLocker locker(&mtx_cache);
+  servers << ptr;
+  servers_lookup_uuid[ptr->uid()] = ptr;
+  if (!ptr->name().isEmpty())
+    servers_lookup_name[ptr->name()] = ptr;
+}
+
+void Ctx::server_remove_cache(const QSharedPointer<Server>& ptr) {
+  if (ptr.isNull()) return;
+  QWriteLocker locker(&mtx_cache);
+  servers.remove(ptr);
+  servers_lookup_uuid.remove(ptr->uid());
+  if (!ptr->name().isEmpty())
+    servers_lookup_name.remove(ptr->name());
+}
+
+void Ctx::role_insert_cache(const QSharedPointer<Role>& ptr) {
+  QWriteLocker locker(&mtx_cache);
+  roles << ptr;
+  roles_lookup_uuid[ptr->uid()] = ptr;
+  if (!ptr->name().isEmpty())
+    roles_lookup_name[ptr->name()] = ptr;
+}
+
+void Ctx::role_remove_cache(const QSharedPointer<Role>& ptr) {
+  if (ptr.isNull()) return;
+  QWriteLocker locker(&mtx_cache);
+  roles.remove(ptr);
+  roles_lookup_uuid.remove(ptr->uid());
+  if (!ptr->name().isEmpty())
+    roles_lookup_name.remove(ptr->name());
+}
+
+void Ctx::upload_insert_cache(const QSharedPointer<Upload>& ptr) {
+  QWriteLocker locker(&mtx_cache);
+  uploads << ptr;
+  uploads_lookup_uuid[ptr->uid()] = ptr;
+}
+
+void Ctx::upload_remove_cache(const QSharedPointer<Upload>& ptr) {
+  if (ptr.isNull()) return;
+  QWriteLocker locker(&mtx_cache);
+  uploads.remove(ptr);
+  uploads_lookup_uuid.remove(ptr->uid());
+}
 
 void onChannelMemberJoined(const QSharedPointer<Account> &account) {
   // g::ctx->accounts.value(account->name);

@@ -20,6 +20,10 @@
 
 #include "core/channel.h"
 #include "core/account.h"
+#include "core/role.h"
+#include "core/upload.h"
+#include "core/server.h"
+#include "core/permission.h"
 
 #include "irc/client_connection.h"
 #include "irc/threaded_server.h"
@@ -52,6 +56,32 @@ public:
   void irc_nicks_remove_cache(const QByteArray& nick) const;
   void irc_nicks_insert_cache(const QByteArray &nick, const QSharedPointer<Account>& ptr) const;
   QSharedPointer<Account> irc_nick_get(const QByteArray &nick) const;
+
+  // servers
+  QSet<QSharedPointer<Server>> servers;
+  QHash<QByteArray, QSharedPointer<Server>> servers_lookup_name;
+  QHash<QByteArray, QSharedPointer<Server>> servers_lookup_uuid;
+  void server_insert_cache(const QSharedPointer<Server>& ptr);
+  void server_remove_cache(const QSharedPointer<Server>& ptr);
+
+  // roles
+  QSet<QSharedPointer<Role>> roles;
+  QHash<QByteArray, QSharedPointer<Role>> roles_lookup_name;
+  QHash<QByteArray, QSharedPointer<Role>> roles_lookup_uuid;
+  void role_insert_cache(const QSharedPointer<Role>& ptr);
+  void role_remove_cache(const QSharedPointer<Role>& ptr);
+
+  // uploads
+  QSet<QSharedPointer<Upload>> uploads;
+  QHash<QByteArray, QSharedPointer<Upload>> uploads_lookup_uuid;
+  void upload_insert_cache(const QSharedPointer<Upload>& ptr);
+  void upload_remove_cache(const QSharedPointer<Upload>& ptr);
+
+  // permissions
+  QSet<QSharedPointer<Permission>> permissions;
+  QHash<QByteArray, QSharedPointer<Permission>> permissions_lookup_uuid;
+  void permission_insert_cache(const QSharedPointer<Permission>& ptr);
+  void permission_remove_cache(const QSharedPointer<Permission>& ptr);
 
   // need to keep track of nicks too, as on IRC they are unique
   // they need to be lowercase

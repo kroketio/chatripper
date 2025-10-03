@@ -2,6 +2,7 @@
 
 #include "ctx.h"
 #include "lib/globals.h"
+#include "core/server.h"
 #include "core/qtypes.h"
 
 Channel::Channel(const QByteArray &name, QObject *parent) : QObject(parent), m_name(name) {
@@ -14,7 +15,14 @@ bool Channel::has(const QByteArray &username) const {
   return true;
 }
 
-QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &topic, const QSharedPointer<Account> &owner, const QDateTime &creation) {
+QSharedPointer<Channel> Channel::create_from_db(
+  const QByteArray &id,
+  const QByteArray &name,
+  const QByteArray &topic,
+  const QSharedPointer<Account> &owner,
+  const QSharedPointer<Server> &server,
+  const QDateTime &creation
+) {
   auto const ctx = Ctx::instance();
   const auto it = ctx->channels.find(name);
   if (it != ctx->channels.end())
@@ -29,11 +37,22 @@ QSharedPointer<Channel> Channel::create_from_db(const QByteArray &id, const QByt
   channel->setName(name);
   if (!owner.isNull())
     channel->setAccountOwner(owner);
+  channel->setServer(server);
   channel->setTopic(topic);
   channel->date_creation = creation;
 
   ctx->channels[name] = channel;
   return channel;
+}
+
+QSharedPointer<Server> Channel::server() const {
+  QReadLocker locker(&mtx_lock);
+  return m_server;
+}
+
+void Channel::setServer(const QSharedPointer<Server> &server) {
+  QWriteLocker locker(&mtx_lock);
+  m_server = server;
 }
 
 void Channel::part(QSharedPointer<Account> &account, const QByteArray &message) {

@@ -16,19 +16,30 @@
 #include <rapidjson/writer.h>
 
 class Account;
+class Server;
 
 class Channel final : public QObject {
   Q_OBJECT
 
 public:
   explicit Channel(const QByteArray &name, QObject *parent = nullptr);
-  static QSharedPointer<Channel> create_from_db(const QByteArray &id, const QByteArray &name, const QByteArray &topic, const QSharedPointer<Account> &owner, const QDateTime &creation);
+  static QSharedPointer<Channel> create_from_db(
+    const QByteArray &id,
+    const QByteArray &name,
+    const QByteArray &topic,
+    const QSharedPointer<Account> &owner,
+    const QSharedPointer<Server> &server,  // Server before creation
+    const QDateTime &creation
+  );
 
   [[nodiscard]] bool has(const QByteArray &account_name) const;
   void join(const QByteArray &account_name);
   void join(QSharedPointer<Account> &account);
   void part(QSharedPointer<Account> &account, const QByteArray &message = "");
   void leave(const QByteArray &account_name);
+
+  void setServer(const QSharedPointer<Server> &server);
+  QSharedPointer<Server> server() const;
 
   void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QMessage> &message);
 
@@ -79,6 +90,7 @@ private:
   QByteArray m_name;
   QByteArray m_topic;
   QByteArray m_key;
+  QSharedPointer<Server> m_server;
   QSharedPointer<Account> m_owner;
   QList<QSharedPointer<Account>> m_members;
 
