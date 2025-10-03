@@ -1,14 +1,13 @@
 # cIRCa
 
-cIRCA is a modern approach to IRC, reimagining the protocol, server architecture, and client features
-from the ground up. Our focus is **solving real-world challenges**, while remaining compatible
-with existing clients.
+cIRCA is a modern approach to IRC, providing a modern chat experience. The 
+focus is practicality, while remaining compatible with existing clients.
 
 **Work in progress**
 
 ## Design philosophy
 
-* A strong focus on utility, practicality, and serviceability
+* A strong focus on utility, and serviceability
 * Embrace modern chat features like accounts, history, metadata, previews, video/audio calls
 * High customizability via an admin web-interface (no messing around in config files)
 * Server-side scripting with Python
