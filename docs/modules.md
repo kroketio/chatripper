@@ -1,10 +1,20 @@
-## Modules
+# Modules
+
+cIRCa has the Python interpreter embedded. It hooks into the server, and at 
+various stages of execution it emits events to the Python runtime where you 
+can act on them.
+
+## How-to
 
 To create a module, define a Python class that inherits from `QIRCModule`.  
 Your class MUST implement `__init__` with a `super()`, then 
 register event callbacks using the `@qirc.on()` decorator.
 
+Your Python file goes into `data/scripts/`
+
 #### Example
+
+Here is an example module: `data/scripts/my_module.py`
 
 ```python3
 class MyModule(QIRCModule):
@@ -20,14 +30,12 @@ class MyModule(QIRCModule):
         # all channel messages get this tag attached
         msg.tags["example-tag"] = "example-value"
         return msg
-```
 
-Then register the module via:
-
-```python3
 my_mod = MyModule()
 qirc.register_module(my_mod)
 ```
+
+Then reload the server, and enable the module.
 
 ## Concurrency
 

@@ -1,26 +1,29 @@
 # cIRCa
 
-cIRCA is a modern approach to IRC, providing a modern chat experience. The 
-focus is practicality, while remaining compatible with existing clients.
+Fast, self-hosted chat platform for team communications.
 
 **Work in progress**
 
 ## Design philosophy
 
-* A strong focus on utility, and serviceability
-* Embrace modern chat features like accounts, history, metadata, previews, video/audio calls
-* High customizability via an admin web-interface (no messing around in config files)
+cIRCa is an IRC server, but unlike others. Read more about it [here](docs/design.md)
+
+## Features
+
+* Multitenancy
+* Custom roles/permissions system
+* Accounts, history, metadata, previews, video/audio calls
+* Built-in bouncer
+* No config, configuration happens through the admin webif
 * Server-side scripting with Python
-* Integrated web chat client
+* Web chat client
 * REST API
+* Generate invite links
 
 ## Performance
 
 cIRCa is designed to operate primarily in memory. It is both multithreaded and 
-asynchronous, and while we haven’t tested it, we are confident it can handle thousands 
-of concurrent connections.
-
-We regularly benchmark key parts of the code to ensure optimal performance. I/O operations are 
+asynchronous. It can handle thousands of concurrent connections. I/O operations are 
 queued whenever possible, and concurrency is prioritized to deliver a fast, responsive chat 
 experience - low-powered hardware included.
 
