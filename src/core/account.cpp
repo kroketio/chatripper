@@ -23,34 +23,35 @@ void Account::setRandomUID() {
   m_uid_str = Utils::uuidBytesToString(m_uid).toUtf8();
 }
 
-QAuthUserResult Account::verifyPassword(const QByteArray &password_candidate, const QHostAddress& ip) const {
-  QAuthUserResult rtn;
+QSharedPointer<QEventAuthUser> Account::verifyPassword(const QSharedPointer<QEventAuthUser> &auth) const {
   QReadLocker locker(&mtx_lock);
 
-  if (password_candidate.isEmpty() || m_password.isEmpty()) {
-    rtn.reason = "password cannot be empty";
-    return rtn;
+  if (auth->password.isEmpty() || m_password.isEmpty()) {
+    auth->reason = "password cannot be empty";
+    auth->_cancel = true;
+    return auth;
   }
 
-  if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
-    const auto res = g::ctx->snakepit->event(
-      QIRCEvent::AUTH_SASL_PLAIN,
-      QString::fromUtf8(m_name),
-      QString::fromUtf8(password_candidate),
-      ip.toString());
+  if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::AUTH_SASL_PLAIN)) {
+    const auto result = g::ctx->snakepit->event(
+      QEnums::QIRCEvent::AUTH_SASL_PLAIN,
+      auth);
 
-    if (res.canConvert<QAuthUserResult>())
-      return res.value<QAuthUserResult>();
+    if (result.canConvert<QSharedPointer<QEventAuthUser>>()) {
+      auto resPtr = result.value<QSharedPointer<QEventAuthUser>>();
+      return resPtr;
+    }
 
-    rtn.reason = "application error";
-    return rtn;
+    auth->reason = "application error";
+    auth->_cancel = true;
+    return auth;
   }
 
-  const std::string candidateStr = password_candidate.toStdString();
+  const std::string candidateStr = auth->password.toStdString();
   const std::string pw = m_password.toStdString();
-  rtn.result = bcrypt::validatePassword(candidateStr, pw);
-  rtn.reason = rtn.result ? "" : "bad password";
-  return rtn;
+  auth->_cancel = !bcrypt::validatePassword(candidateStr, pw);
+  auth->reason = auth->cancelled() ? "bad password" : "";
+  return auth;
 }
 
 QSharedPointer<Account> Account::create() {
@@ -127,7 +128,6 @@ QByteArray Account::nick() {
 }
 
 bool Account::setNick(const QByteArray &nick) {
-  QWriteLocker locker(&mtx_lock);
   if (nick.isEmpty())
     return false;
 
@@ -135,71 +135,84 @@ bool Account::setNick(const QByteArray &nick) {
   if (self.isNull())
     return false;
 
-  const QByteArray nick_lower = nick.toLower();
-  const QByteArray nick_old = m_nick;
-  const QByteArray nick_old_lower = m_nick.toLower();
+  QByteArray nick_lower;
+  QByteArray nick_old;
+  QByteArray nick_old_lower;
+
+  {
+    QReadLocker rlock(&mtx_lock);
+    nick_lower = nick.toLower();
+    nick_old = m_nick;
+    nick_old_lower = m_nick.toLower();
+  }
 
   const auto irc_nick_ptr = g::ctx->irc_nick_get(nick_lower);
+  QWriteLocker mtx_irc_nick_rlock(&g::ctx->mtx_cache);
   if (!irc_nick_ptr.isNull() && g::ctx->irc_nicks.value(nick_lower) != self)
     // @TODO: better return errors
     return false;
+  mtx_irc_nick_rlock.unlock();
 
   QWriteLocker mtx_irc_nick(&g::ctx->mtx_cache);
   g::ctx->irc_nicks.remove(nick_old);
   g::ctx->irc_nicks[nick_lower] = self;
   mtx_irc_nick.unlock();
 
+  QWriteLocker wlock(&mtx_lock);
   m_nick = nick;
+  wlock.unlock();
 
   // gather accounts that need to be notified
   QSet<QSharedPointer<Account>> l;
 
-  for (auto it = channels.begin(); it != channels.end(); ++it) {
-    // QByteArray key = it.key();
-    const QSharedPointer<Channel> &channel = it.value();
-    for (const auto& acc: channel->members()) {
-      l.insert(acc);
-    }
-  }
-
-  for (const auto& channel: channels) {
-    for (const auto& acc: channel->members()) {
-      l.insert(acc);
-    }
-  }
-
-  // send nick change notify to the relevant, other accounts
-  for (const auto& acc: l) {
-    if (acc != self) {
-      for (const auto&conn : acc->connections) {
-        conn->change_nick(self, nick_old, nick);
+  {
+    QReadLocker rlock(&mtx_lock);
+    for (auto it = channels.begin(); it != channels.end(); ++it) {
+      // QByteArray key = it.key();
+      const QSharedPointer<Channel> &channel = it.value();
+      for (const auto& acc: channel->members()) {
+        l.insert(acc);
       }
     }
-  }
 
-  for (const auto& conn: connections) {
-    conn->change_nick(m_nick);
-    conn->nick = m_nick;
+    for (const auto& channel: channels) {
+      for (const auto& acc: channel->members()) {
+        l.insert(acc);
+      }
+    }
+
+    // send nick change notify to the relevant, other accounts
+    for (const auto& acc: l) {
+      if (acc != self) {
+        for (const auto&conn : acc->connections) {
+          QMetaObject::invokeMethod(
+            conn,
+            [conn, self, nick_old, nick] {
+              conn->change_nick(self, nick_old, nick);
+            },
+            Qt::QueuedConnection
+          );
+        }
+      }
+    }
+
+    for (const auto& conn: connections) {
+      QMetaObject::invokeMethod(
+          conn,
+          [=] {
+            conn->change_nick(m_nick);
+          },
+          Qt::QueuedConnection
+      );
+
+      conn->nick = m_nick;
+    }
   }
 
   return true;
 }
 
-// @TODO: check if user is allowed to create new channel
-void Account::channel_join(QSharedPointer<Account> &acc, const QByteArray& channel_name) {
-  const auto ptr = Channel::get_or_create(channel_name);
-  ptr->join(acc);
-}
-
-void Account::channel_part(QSharedPointer<Account> &acc, const QByteArray& channel_name, const QByteArray &message) {
-  if (!g::ctx->channels.contains(channel_name))
-    return;
-
-  const auto ptr = Channel::get(channel_name);
-  ptr->part(acc, message);
-}
-
-void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, QSharedPointer<QMessage> &message) {
+void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, QSharedPointer<QEventMessage> &message) {
   // @TODO: deal with history when we are offline
   QReadLocker locker(&mtx_lock);
 

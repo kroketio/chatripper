@@ -1,7 +1,6 @@
 # Design, motivations, goals
 
-While cIRCa uses the IRC protocol, cIRCa is not a typical IRC server, 
-rather it is a chat platform that is developed on top of IRC. We found 
+cIRCa is a chat platform developed on top of IRC. We found 
 ways to extend, and improve this [old protocol](https://en.wikipedia.org/wiki/IRC) 
 in favor of allowing more modern features whilst keeping it backward 
 compatible with IRC, and IRCv3 clients.
@@ -48,7 +47,7 @@ Our goals for a self-hosted chat platform are:
 
 ## Why we choose IRC
 
-Because it is simple! we can quickly debug things using standard network capture
+Because it is simple, we can quickly debug things using standard network capture
 tools (shoutout to `ngrep -dlo -qt -W byline port 6667`), and the protocol 
 is well understood. Other protocols are more complicated, therefor requiring 
 more implementation effort. 
@@ -59,7 +58,7 @@ not meet user expectations, as explained by long time IRC developer ariadne in
 a [Mastodon thread](https://web.archive.org/web/20230418155309mp_/https://social.treehouse.systems/@ariadne/110199104168870444).
 
 If we picked Matrix, or XMPP, and tried to make a server, it 
-would take an unrealistic amount of time. We already know we want to implement 
+would take a great amount of time. We already know we want to implement 
 custom features, and that would require a (deep) understanding of the protocol in 
 question, which can be quite a bit to absorb. We also need to create a custom 
 client to test all these custom server features, again costing time.

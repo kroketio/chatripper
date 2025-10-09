@@ -11,9 +11,19 @@
 #include "python/interpreter.h"
 #include "lib/logger_std/logger_std.h"
 #include "lib/globals.h"
+#include "core/qtypes.h"
+#include "python/type_registry.h"
 #include "ctx.h"
 
 int main(int argc, char *argv[]) {
+  qRegisterMetaType<QSharedPointer<QEventBase>>("QSharedPointer<QEventBase>");
+  qRegisterMetaType<QSharedPointer<QEventChannelJoin>>("QSharedPointer<QEventChannelJoin>");
+  qRegisterMetaType<QSharedPointer<QEventMessage>>("QSharedPointer<QEventMessage>");
+  qRegisterMetaType<QSharedPointer<QEventAuthUser>>("QSharedPointer<QEventAuthUser>");
+  qRegisterMetaType<QSharedPointer<Account>>("QSharedPointer<Account>");
+  qRegisterMetaType<QSharedPointer<Channel>>("QSharedPointer<Channel>");
+  PyTypeRegistry::registerAll();
+
   auto byebye = [](int){ QCoreApplication::quit(); };
   std::signal(SIGINT, byebye);
   std::signal(SIGTERM, byebye);

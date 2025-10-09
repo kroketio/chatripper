@@ -79,29 +79,42 @@ void Channel::part(QSharedPointer<Account> &account, const QByteArray &message) 
   }
 }
 
-void Channel::join(QSharedPointer<Account> &account) {
-  QWriteLocker locker(&mtx_lock);
+// @TODO: check if user is allowed to join/create new channel
+// auto join = QSharedPointer<QEventChannelJoin>(new QEventChannelJoin);
+void Channel::join(const QSharedPointer<QEventChannelJoin> &event) {
   const auto chan_ptr = get(m_name);
 
-  if (!m_members.contains(account)) {
-    m_members << account;
-    emit memberJoined(account);
-    account->channels[m_name] = chan_ptr;
+  if (!event->from_system && g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::CHANNEL_JOIN)) {
+    const auto result = g::ctx->snakepit->event(QEnums::QIRCEvent::CHANNEL_JOIN, event);
+
+    if (result.canConvert<QSharedPointer<QEventChannelJoin>>()) {
+      auto resPtr = result.value<QSharedPointer<QEventChannelJoin>>();
+      if (resPtr->cancelled())
+        return;
+    }
+  }
+
+  QWriteLocker locker(&mtx_lock);
+  if (!m_members.contains(event->account)) {
+    m_members << event->account;
+    emit memberJoined(event->account);
+    event->account->channels[m_name] = chan_ptr;
   }
 
   // make sure the various connections are actually in this channel
-  for (const auto& conn: account->connections) {
+  for (const auto& conn: event->account->connections) {
     if (!conn->channels.contains(m_name))
-      conn->channel_join(m_name, "");
+      conn->channel_join(event);
   }
 
   // notify channel participants
   for (const auto& member: m_members) {
-    if (member->uid() == account->uid()) continue;
+    if (member->uid() == event->account->uid())
+      continue;
 
     for (const auto& conn: member->connections) {
-      if (!conn->channel_members[chan_ptr].contains(account)) {
-        conn->channel_join(chan_ptr, account, "");
+      if (!conn->channel_members[chan_ptr].contains(event->account)) {
+        conn->channel_join(event);
       }
     }
   }
@@ -208,23 +221,14 @@ QList<QByteArray> Channel::banList() const {
   return m_ban_masks.values();
 }
 
-void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QMessage> &message) {
-  QReadLocker locker(&mtx_lock);
-  if (g::ctx->snakepit->hasEventHandler(QIRCEvent::CHANNEL_MSG)) {
-    auto res = g::ctx->snakepit->event(QIRCEvent::CHANNEL_MSG, this->to_variantmap(), from->to_variantmap(), message->to_variantmap());
-    if (res.canConvert<QMessage>()) {
-      const auto new_msg = res.value<QMessage>();
-      // @TODO: we can do better
-      message->id = new_msg.id;
-      message->tags = new_msg.tags;
-      message->nick = new_msg.nick;
-      message->user = new_msg.user;
-      message->host = new_msg.host;
-      message->targets = new_msg.targets;
-      message->account = new_msg.account;
-      message->text = new_msg.text;
-      message->raw = new_msg.raw;
-      message->from_server = new_msg.from_server;
+void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QEventMessage> &message) {
+  if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::CHANNEL_MSG)) {
+    const auto result = g::ctx->snakepit->event(QEnums::QIRCEvent::CHANNEL_MSG, message);
+
+    if (result.canConvert<QSharedPointer<QEventMessage>>()) {
+      const auto resPtr = result.value<QSharedPointer<QEventMessage>>();
+      if (resPtr->cancelled())
+        return;
     } else {
       return;
     }
@@ -232,6 +236,7 @@ void Channel::message(const irc::client_connection *from_conn, const QSharedPoin
 
   // @TODO: check if user is actually online, store stuff in db if not
 
+  QReadLocker locker(&mtx_lock);
   for (const auto&member: m_members) {
     if (member != from) {
       for (const auto& _conn: member->connections)

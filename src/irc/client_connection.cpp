@@ -405,46 +405,53 @@ namespace irc {
     QMutexLocker locker(&mtx_lock);
   }
 
-  void client_connection::self_message(const QByteArray& target, const QSharedPointer<QMessage> &message) const {
+  void client_connection::self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message) const {
     if (capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE)) {
       const QByteArray msg = ":" + prefix() + " PRIVMSG " + target + " :" + message->text + "\r\n";
       emit sendData(msg);
     }
   }
 
-  void client_connection::message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QMessage> &message) const {
+  void client_connection::message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QEventMessage> &message) const {
     const QByteArray msg = ":" + src->prefix(0) + " PRIVMSG " + target + " :" + message->text + "\r\n";
     emit sendData(msg);
   }
 
-  void client_connection::channel_join(const QSharedPointer<Channel> &channel, const QSharedPointer<Account> &account, const QByteArray &password) {
-    const auto acc_prefix = account->prefix(0);
+  void client_connection::channel_join(const QSharedPointer<QEventChannelJoin> &event) {
+    if (event.isNull()) return;
 
-    const QByteArray msg = ":" + acc_prefix + " JOIN :#" + channel->name() + "\r\n";
-    emit sendData(msg);
+    const auto &account = event->account;
+    const auto &channel = event->channel;
 
-    QMutexLocker locker(&mtx_lock);
-    if (!channel_members.contains(channel))
-      channel_members[channel] = {};
-    channel_members[channel] << account;
-  }
-
-  void client_connection::channel_join(const QByteArray &channel_name, const QByteArray &password) {
-    if (m_account == nullptr)
-      return;
-
-    const auto channel = Channel::get(channel_name);
     if (channel.isNull()) {
-      qWarning() << "no channel, DEBUG ME";
+      qCritical() << "no channel, DEBUG ME";
       return;
     }
+
+    const auto channel_name = channel->name();
+
+    // notification of a participant joining
+    if (event->account != m_account) {
+      const auto acc_prefix = account->prefix(0);
+
+      const QByteArray msg = ":" + acc_prefix + " JOIN :#" + channel->name() + "\r\n";
+      emit sendData(msg);
+
+      QMutexLocker locker(&mtx_lock);
+      if (!channel_members.contains(channel))
+        channel_members[channel] = {};
+      channel_members[channel] << account;
+
+      return;
+    }
+
+    // we are joining
 
     // this connection is already in the channel
     // @TODO: move `channels` mutations to setters/getters+lock
     QMutexLocker locker(&mtx_lock);
     if (channels.contains(channel_name))
       return;
-
     if (!channel_members.contains(channel))
       channel_members[channel] = {};
     for (const auto& member : channel->members()) {
@@ -458,11 +465,11 @@ namespace irc {
 
     // topic
     if (channel->topic().isEmpty()) {
-      reply_num(331, "#" + channel->name() + " :No topic is set");
+      reply_num(331, "#" + channel_name + " :No topic is set");
     } else {
       // :irc.local 333 bla #test bbb!dsc@127.0.0.1 :1758051783.
       // @TODO: implement RPL_TOPICWHOTIME^
-      send_raw("332 " + nick + " #" + channel->name() + " :" + channel->topic());
+      send_raw("332 " + nick + " #" + channel_name + " :" + channel->topic());
     }
 
     // names
@@ -511,16 +518,22 @@ namespace irc {
       return;
     }
 
-    // optional: see if user may create this channel
-    // const auto channel = Channel::get(args.first());
-    // if channel.isNull()
-
     QList<QByteArray> chans = args[0].split(',');
     for (auto& name : chans) {
-      auto channel_name = name.mid(1);
-      if (!channel_name.isEmpty())
-        m_account->channel_join(m_account, channel_name);
+      const auto channel_name = name.mid(1);
+      if (!channel_name.isEmpty()) {
+        const auto channel = Channel::get(channel_name);
+        if (!channel.isNull()) {
+          const auto event = QSharedPointer<QEventChannelJoin>(new QEventChannelJoin);
+          event->from_system = false;
+          event->channel = channel;
+          event->account = m_account;
+          return channel->join(event);
+        }
+      }
     }
+
+    reply_num(476, args.at(0) + " :Invalid channel name");
   }
 
   void client_connection::handlePART(const QList<QByteArray> &args) {
@@ -543,13 +556,12 @@ namespace irc {
         continue;
 
       auto channel_name = _name.mid(1);
-      if (!channels.contains(channel_name))
-        continue;
-
-      m_account->channel_part(m_account, channel_name, message);
+      auto chan_ptr = Channel::get(channel_name);
+      if (!chan_ptr.isNull())
+        chan_ptr->part(m_account, message);
+      else
+        send_raw("442 " + nick + " " + channel_name + " :You're not on that channel");
     }
-
-    // sendRaw("442 " + nick + " " + c + " :You're not on that channel");
   }
 
   // @TODO: support account-tag https://ircv3.net/specs/extensions/account-tag
@@ -565,10 +577,10 @@ namespace irc {
     const QByteArray target = args[0];
     const QByteArray text = args[1];
 
-    auto msg = QSharedPointer<QMessage>(new QMessage);
-    msg->account = m_account->uid();
+    auto msg = QSharedPointer<QEventMessage>(new QEventMessage);
+    msg->account = m_account;
     msg->text = text;
-    msg->from_server = false;
+    msg->from_system = false;
     msg->nick = nick;
     msg->raw = args.join(" ");
     msg->user = user;
@@ -581,6 +593,7 @@ namespace irc {
         return;
       }
 
+      msg->channel = chan_ptr;
       chan_ptr->message(this, m_account, msg);
     } else {
       if (!g::ctx->irc_nicks.contains(target)) {
@@ -844,7 +857,11 @@ namespace irc {
       handleMODE({nick, "+r"});
 
     for (const auto& channel : m_account->channels) {
-      channel->join(m_account);
+      auto event = QSharedPointer<QEventChannelJoin>(new QEventChannelJoin);
+      event->from_system = true;
+      event->channel = channel;
+      event->account = m_account;
+      channel->join(event);
     }
 
     _is_setup = true;
@@ -876,8 +893,13 @@ namespace irc {
 
     const auto account = Account::get_by_name(username);
     if (!account.isNull()) {
-      const auto [result, reason] = account->verifyPassword(password, m_socket->peerAddress());
-      if (result) {
+      auto auth = QSharedPointer<QEventAuthUser>(new QEventAuthUser);
+      auth->username = username;
+      auth->password = password;
+      auth->ip = m_socket->peerAddress().toString();
+
+      auth = account->verifyPassword(auth);
+      if (!auth->cancelled()) {
         account->merge(m_account);
         m_account = account;
 
@@ -888,8 +910,8 @@ namespace irc {
       }
 
       QByteArray reply = "SASL authentication failed";
-      if (!reason.isEmpty())
-        reply += ": " + reason;
+      if (!auth->reason.isEmpty())
+        reply += ": " + auth->reason;
 
       reply_num(900, reply);
       m_socket->disconnectFromHost();

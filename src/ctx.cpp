@@ -85,6 +85,10 @@ Ctx::Ctx() {
 
   // Python
   snakepit = new SnakePit(this);
+  connect(snakepit, &SnakePit::allSnakesStarted, [this] {
+    snakepit->enableModule("TestModule");
+    snakepit->enableModule("AuthModule");
+  });
 }
 
 bool Ctx::account_username_exists(const QByteArray &username) const {
@@ -165,22 +169,30 @@ QList<QVariantMap> Ctx::getChannelsByUUIDs(const QList<QByteArray> &uuids) const
 void Ctx::createDefaultFiles() {
   // Python
   auto dest_python = g::pythonModulesDirectory;
-  auto files_python = {
-    ":/qircd.py"
+  const QMap<QString, QString> files_python = {
+    {":/qircd.py",  "__init__.py"},
+    {":/models.py", "models.py"},
+    {":/events.py", "events.py"}
   };
 
-  for (const auto &fp : files_python) {
-    if (!QFile::exists(fp)) {
-      qWarning() << "Source file does not exist, skipping:" << fp;
-      continue;
-    }
+  for (auto it = files_python.constBegin(); it != files_python.constEnd(); ++it) {
+    const QString &fp = it.key();
+    const QString &destName = it.value();
 
-    QFileInfo fileInfo(fp);
-    QString to_path = QString("%1%2").arg(dest_python, fileInfo.fileName());
+    // if (!QFile::exists(fp)) {
+    //   qWarning() << "Source file does not exist, skipping:" << fp;
+    //   continue;
+    // }
+
+    QString to_path = QString("%1/qircd/%2").arg(dest_python, destName);
+
+    // if (QFile::exists(to_path)) {
+    //   qDebug() << "File already exists, skipping:" << to_path;
+    //   continue;
+    // }
 
     if (QFile::exists(to_path)) {
-      qDebug() << "File already exists, skipping:" << to_path;
-      continue;
+      QFile::remove(to_path);
     }
 
     if (!QFile::copy(fp, to_path)) {
@@ -191,6 +203,7 @@ void Ctx::createDefaultFiles() {
     QFile::setPermissions(to_path, QFile::ExeUser | QFile::ReadUser | QFile::WriteUser);
   }
 }
+
 
 void Ctx::startIRC(const int port, const QByteArray& password) {
   irc_server = new irc::ThreadedServer(4, 5);

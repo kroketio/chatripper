@@ -18,6 +18,9 @@ from uuid import UUID, uuid4
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Callable, Set
 
+from .models import *
+from .events import *
+
 _INTERPRETER_IDX = -1
 _IS_DEBUG = False
 
@@ -47,8 +50,8 @@ class QIRCEvent(IntFlag):
     AUTH_SASL_PLAIN     = 1 << 0
     CHANNEL_MSG         = 1 << 1
     PRIVATE_MSG         = 1 << 2
-    JOIN                = 1 << 3
-    LEAVE               = 1 << 4
+    CHANNEL_JOIN        = 1 << 3
+    CHANNEL_LEAVE       = 1 << 4
 
 class QIRCModule:
     """
@@ -122,83 +125,6 @@ class QIRCModule:
                 })
         return handlers
 
-@dataclass
-class Account:
-    name: str
-    nick: str
-    password: Optional[str] = None
-    host: Optional[str] = None
-
-    uid: bytes = field(default_factory=lambda: uuid4())
-    creation_date: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-    channels: List[bytes] = field(default_factory=list)
-
-    connections_count: int = 0
-
-    def prefix(self) -> str:
-        """nick!username@host."""
-        user = self.name or ""
-        host = self.host or "localhost"
-        return f"{self.nick}!{user}@{host}"
-
-@dataclass
-class Message:
-    id: bytes = field(default_factory=lambda: uuid4())
-
-    # IRCv3 message tags (key/value strings, e.g. `time`, `msgid`, `account`, `+draft/reply`)
-    tags: Dict[str, Optional[str]] = field(default_factory=dict)
-
-    # prefix information (usually the sender)
-    nick: Optional[str] = None
-    user: Optional[str] = None
-    host: Optional[str] = None
-
-    # target(s) of the PRIVMSG (channels or nicks)
-    targets: List[str] = field(default_factory=list)
-
-    account: Optional[Account] = None
-
-    text: str = ""
-    raw: Optional[bytes] = None
-
-    # message originates from server (NOTICE, CTCP replies, etc.)
-    from_server: bool = False
-
-@dataclass
-class AuthUserResult:
-    result: bool = False
-    reason: str = None
-
-@dataclass
-class Channel:
-    """Represents an IRC channel with topic, members, and modes."""
-    uid: bytes = field(default_factory=lambda: uuid4())
-    name: str = ""
-    topic: str = ""
-    key: Optional[str] = None
-    owner: Optional[str] = None
-    date_creation: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-    # members: List["Account"] = field(default_factory=list)
-    members: List[bytes] = field(default_factory=list)
-
-    # channel modes (like +m, +k, +l etc.)
-    modes: Dict[str, Optional[str]] = field(default_factory=dict)
-
-    # ban masks
-    ban_masks: Set[str] = field(default_factory=set)
-
-    # limit (like +l)
-    limit: Optional[int] = None
-
-@dataclass
-class User:
-    user_id: str
-    username: str
-    password: str
-    is_authenticated: bool = False
-
 class QIRC:
     _handlers = {}
     _modules: dict[str, QIRCModule] = {}
@@ -208,21 +134,11 @@ class QIRC:
         _debug: bool = False
 
     def call(self, event: "QIRCEvent", *args, **kwargs):
-        ev = QIRCEvent(event)
-
         handlers = self._handlers.get(event)
         if not handlers:
             if _IS_DEBUG:
                 QPrint(f"Error: No handler for event {event}", file=sys.stderr)
             return None
-
-        # normalize channel message args
-        if ev is QIRCEvent.CHANNEL_MSG:
-            chan_data, account_data, message = args
-            chan = Channel(**chan_data)
-            account = Account(**account_data)
-            message = Message(**message)
-            args = (chan, account, message)
 
         result = None
         for instance, func in handlers:

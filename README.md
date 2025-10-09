@@ -1,17 +1,17 @@
 # cIRCa
 
-Fast, self-hosted chat platform for team communications.
+Fast, self-hosted, highly scriptable chat platform for team communications.
 
 **Work in progress**
 
 ## Design philosophy
 
-cIRCa is an IRC server, but unlike others. Read more about it [here](docs/design.md)
+cIRCa is an IRC server, but unlike others. Read [more](docs/design.md).
 
 ## Features
 
 * Multitenancy
-* Custom roles/permissions system
+* Roles/permissions system
 * Accounts, history, metadata, previews, video/audio calls
 * Built-in bouncer
 * No config, configuration happens through the admin webif
@@ -32,19 +32,26 @@ experience - low-powered hardware included.
 Change messages in transit, modify/add IRCv3 message tags, and more.
 
 ```python3
+from qircd import *
+
 class MyModule(QIRCModule):
-  def __init__(self):
-    super().__init__()
+    def __init__(self):
+        super().__init__()
 
-  @qirc.on(QIRCEvent.CHANNEL_MSG)
-  def channel_message_handler(self, channel: Channel, acc: Account, msg: Message) -> Message:
-    if acc.username == "sander":
-      # messages from `sander` are always uppercase now
-      msg.text = msg.text.upper()
+    @qirc.on(QIRCEvent.CHANNEL_MSG)
+    def channel_message_handler(self, msg: Message) -> Message:
+        print(f"new message in {msg.channel.name}")
 
-    # all channel messages get this tag attached
-    msg.tags["example-tag"] = "example-value"
-    return msg
+        if msg.account.name == "sander":
+            # messages from `sander` are always uppercase now
+            msg.text = msg.text.upper()
+
+        # all channel messages get this tag attached
+        msg.tags["example-tag"] = "example-value"
+        return msg
+
+my_mod = MyModule()
+qirc.register_module(my_mod)
 ```
 
 `Channel` and `Account` objects are available for any additional logic.

@@ -27,14 +27,14 @@ public:
   void refreshModulesAll();
 
   // events
-  Flags<QIRCEvent> activeEvents() const;
-  bool hasEventHandler(QIRCEvent event) const;
+  Flags<QEnums::QIRCEvent> activeEvents() const;
+  bool hasEventHandler(QEnums::QIRCEvent event) const;
 
   template<typename... Args>
-  QVariant event(QIRCEvent ev, Args&&... args) {
+  QVariant event(QEnums::QIRCEvent ev, Args&&... args) {
     QVariantList argList;
     argList.append(static_cast<int>(ev));
-    (argList.append(QVariant(std::forward<Args>(args))), ...);
+    (argList.append(QVariant::fromValue(std::forward<Args>(args))), ...);
     return callFunctionList("__qirc_call", argList);
   }
 
@@ -54,8 +54,8 @@ private slots:
 private:
   QHash<QByteArray, QSharedPointer<ModuleClass>> m_modules;
 
-  Flags<QIRCEvent> m_activeExclusiveEvents;  // pinned to interpreter idx 0
-  Flags<QIRCEvent> m_activeEvents;
+  Flags<QEnums::QIRCEvent> m_activeExclusiveEvents;  // pinned to interpreter idx 0
+  Flags<QEnums::QIRCEvent> m_activeEvents;
   void calcActiveEvents();
 
   mutable QReadWriteLock m_activeEventsLock;

@@ -19,7 +19,14 @@ class Account;
 class Server;
 
 class Channel final : public QObject {
-  Q_OBJECT
+Q_OBJECT
+Q_PROPERTY(QByteArray name READ name WRITE setName NOTIFY topicChanged)
+Q_PROPERTY(QByteArray topic READ topic WRITE setTopic NOTIFY topicChanged)
+Q_PROPERTY(QByteArray key READ key WRITE setKey NOTIFY keyChanged)
+Q_PROPERTY(int limit READ limit)
+Q_PROPERTY(QDateTime date_creation MEMBER date_creation)
+Q_PROPERTY(QByteArray uid MEMBER uid)
+Q_PROPERTY(QByteArray uid_str MEMBER uid_str)
 
 public:
   explicit Channel(const QByteArray &name, QObject *parent = nullptr);
@@ -33,15 +40,15 @@ public:
   );
 
   [[nodiscard]] bool has(const QByteArray &account_name) const;
-  void join(const QByteArray &account_name);
-  void join(QSharedPointer<Account> &account);
+  // void join(const QByteArray &account_name);
+  void join(const QSharedPointer<QEventChannelJoin> &event);
   void part(QSharedPointer<Account> &account, const QByteArray &message = "");
   void leave(const QByteArray &account_name);
 
   void setServer(const QSharedPointer<Server> &server);
   QSharedPointer<Server> server() const;
 
-  void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QMessage> &message);
+  void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QEventMessage> &message);
 
   void setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg = {});
 

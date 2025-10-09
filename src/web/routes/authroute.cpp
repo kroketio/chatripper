@@ -54,15 +54,20 @@ void install(QHttpServer *server, RateLimiter *limiter) {
       const QString username = obj.value("username").toString();
       const QString password = obj.value("password").toString();
 
-      if (g::ctx->snakepit->hasEventHandler(QIRCEvent::AUTH_SASL_PLAIN)) {
-        const auto res = g::ctx->snakepit->event(
-          QIRCEvent::AUTH_SASL_PLAIN,
-          username,
-          password,
-          ip.toString());
+      const auto event = QSharedPointer<QEventAuthUser>(new QEventAuthUser());
+      event->username = username.toUtf8();
+      event->password = password.toUtf8();
+      event->ip = ip.toString().toUtf8();
 
-        if (!res.canConvert<QAuthUserResult>())
-          return create_session(username);
+      if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::AUTH_SASL_PLAIN)) {
+        const auto result = g::ctx->snakepit->event(
+          QEnums::QIRCEvent::AUTH_SASL_PLAIN, event);
+
+        if (result.canConvert<QSharedPointer<QEventAuthUser>>()) {
+          const auto resPtr = result.value<QSharedPointer<QEventAuthUser>>();
+          if (!resPtr->cancelled())
+            return create_session(username);
+        }
 
         return QHttpServerResponse("invalid credentials", QHttpServerResponder::StatusCode::Unauthorized);
       }

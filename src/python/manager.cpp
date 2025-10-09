@@ -110,15 +110,15 @@ bool SnakePit::disableModule(const QString &name) {
 }
 
 void SnakePit::calcActiveEvents() {
-  Flags<QIRCEvent> flags;
-  Flags<QIRCEvent> flagsExclusive;
+  Flags<QEnums::QIRCEvent> flags;
+  Flags<QEnums::QIRCEvent> flagsExclusive;
   for (auto it = m_modules.constBegin(); it != m_modules.constEnd(); ++it) {
     const auto &mod = it.value();
     if (!mod->enabled)
       continue;
     for (const auto &[event, method]: mod->handlers) {
       flags.set(event);
-      if (mod->mode == QModuleMode::EXCLUSIVE)
+      if (mod->mode == QEnums::QModuleMode::EXCLUSIVE)
         flagsExclusive.set(event);
     }
   }
@@ -135,8 +135,8 @@ QVariant SnakePit::callFunctionList(const QString &funcName, const QVariantList 
   Snake *target = nullptr;
 
   QMutexLocker locker(&mtx_snake);
-  if (ev.canConvert<QIRCEvent>())
-    if (const auto event = ev.value<QIRCEvent>(); m_activeExclusiveEvents.has(event))
+  if (ev.canConvert<QEnums::QIRCEvent>())
+    if (const auto event = ev.value<QEnums::QIRCEvent>(); m_activeExclusiveEvents.has(event))
       target = m_snakes[0];  // event is exclusive to interpreter 0
 
   if (target == nullptr) {
@@ -160,12 +160,12 @@ QVariant SnakePit::callFunctionList(const QString &funcName, const QVariantList 
   return returnValue;
 }
 
-bool SnakePit::hasEventHandler(const QIRCEvent event) const {
+bool SnakePit::hasEventHandler(const QEnums::QIRCEvent event) const {
   QReadLocker locker(&m_activeEventsLock);
   return m_activeEvents.has(event);
 }
 
-Flags<QIRCEvent> SnakePit::activeEvents() const {
+Flags<QEnums::QIRCEvent> SnakePit::activeEvents() const {
   QReadLocker locker(&m_activeEventsLock);
   return m_activeEvents;
 }

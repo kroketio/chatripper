@@ -7,11 +7,15 @@
 #include <QThread>
 #include <QCoreApplication>
 #include <QFile>
+#include <QMetaProperty>
+#include <QSharedPointer>
+#include <QVariant>
 
 #include "ctx.h"
 #include "config-circa.h"
 #include "lib/utils.h"
 #include "lib/logger_std/logger_std.h"
+#include "python/type_registry.h"
 #include "python/utils.h"
 
 struct ThreadInterp {
@@ -91,7 +95,37 @@ void Snake::start() {
   PyRun_SimpleString(
       QString("import sys; sys.path.append('%1'); from qircd import __qirc_call").arg(modulePath).toUtf8().constData());
 
+  //
+  // load event dataclasses
+  //
+  PyObject *eventsModule = PyImport_ImportModule("qircd.events");
+  if (!eventsModule) {
+    PyErr_Print();
+    qWarning() << "Failed to import 'qircd.events'";
+    return;
+  }
+
+  // getattr
+  const char *classNames[] = {"AuthUser", "Message", "ChannelJoin", "Account", "Channel"};
+  for (const char *name: classNames) {
+    PyObject *cls = PyObject_GetAttrString(eventsModule, name);
+    if (!cls || !PyCallable_Check(cls)) {
+      PyErr_Print();
+      qWarning() << "Could not access class" << name;
+      Py_XDECREF(cls);
+      continue;
+    }
+
+    // store, increase refcount
+    Py_INCREF(cls);
+    eventClasses_[name] = cls;
+  }
+
+  Py_DECREF(eventsModule);
+
+  //
   // load user modules
+  //
   QDir dir(modulePath);
   const QStringList filters{"*.py"};
   dir.setNameFilters(filters);
@@ -221,8 +255,7 @@ Snake::~Snake() {
   }
 }
 
-// has initial support for asyncio
-QVariant Snake::executeFunction(const QString &funcName, const QVariantList &args) const {
+QVariant Snake::executeFunction(const QString &funcName, const QVariantList &args) {
   qDebug() << "Python call in interpreter" << idx << args;
   QVariant result;
 
@@ -244,13 +277,30 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
   }
 
   // build argument tuple
-  PyObject *pyArgs = PyTuple_New(args.size());
+  PyObject* pyArgs = PyTuple_New(args.size());
   for (int i = 0; i < args.size(); ++i) {
-    PyObject *pyObj = QVariantToPyObject(args[i]);
-    PyTuple_SetItem(pyArgs, i, pyObj); // steals reference
+    const QVariant &arg = args[i];
+    PyObject *pyObj = nullptr;
+
+    for (const auto& entry : PyTypeRegistry::all()) {
+      if (!entry.castFunc) continue;
+
+      QByteArray metaName = entry.meta->className();
+      const int targetTypeId = QMetaType::fromName((std::string("QSharedPointer<") + metaName.constData() + ">").c_str()).id();
+
+      if (arg.userType() == targetTypeId) {
+        pyObj = static_cast<PyObject*>(
+          eventToPyHandle(*static_cast<const QSharedPointer<QEventBase>*>(arg.constData()))
+        );
+        break;
+      }
+    }
+
+    if (!pyObj) pyObj = QVariantToPyObject(arg);
+    PyTuple_SetItem(pyArgs, i, pyObj);
   }
 
-  // call function
+  // call Python function
   PyObject *pyResult = PyObject_CallObject(pyFunc, pyArgs);
   Py_DECREF(pyArgs);
 
@@ -261,7 +311,7 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
     return result;
   }
 
-  // handle async functions
+  // handle async function
   if (PyCoro_CheckExact(pyResult)) {
     PyObject *asyncio = PyImport_ImportModule("asyncio");
     if (!asyncio) {
@@ -277,9 +327,9 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
 
     if (!runFunc || !PyCallable_Check(runFunc)) {
       PyErr_Print();
-      qWarning() << "asyncio.run not callable";
       Py_XDECREF(runFunc);
       Py_DECREF(pyResult);
+      qWarning() << "asyncio.run not callable";
       interp_->tstate = PyEval_SaveThread();
       return result;
     }
@@ -295,15 +345,37 @@ QVariant Snake::executeFunction(const QString &funcName, const QVariantList &arg
       return result;
     }
 
-    result = PyObjectToQVariant(awaited);
-    Py_DECREF(awaited);
-  } else {
-    result = PyObjectToQVariant(pyResult);
-    Py_DECREF(pyResult);
+    pyResult = awaited; // continue handling as normal result
   }
 
+  // if result is a dataclass, recursively update existing QSharedPointers in args
+  if (PyObject_HasAttrString(pyResult, "__annotations__")) {
+    for (int i = 0; i < args.size(); ++i) {
+      const QVariant &arg = args[i];
+
+      for (const auto& entry : PyTypeRegistry::all()) {
+        if (!entry.castFunc) continue;
+
+        QByteArray metaName = entry.meta->className();
+        const int typeId = QMetaType::fromName(
+          QByteArray("QSharedPointer<") + entry.meta->className() + '>'
+        ).id();
+
+        if (arg.userType() == typeId) {
+          auto evPtr = *static_cast<const QSharedPointer<QEventBase>*>(arg.constData());
+          if (evPtr)
+            updateGadgetFromPyDataclass(evPtr.data(), entry.meta, pyResult);
+          break;
+        }
+      }
+    }
+  }
+
+  Py_DECREF(pyResult);
   interp_->tstate = PyEval_SaveThread();
-  return result;
+
+  // return the same second argument (if exists)
+  return args.size() > 1 ? args.at(1) : QVariant();
 }
 
 static PyObject *py_get_accounts(PyObject *self, PyObject *args) {
@@ -396,4 +468,369 @@ static PyObject *py_get_channels(PyObject *self, PyObject *args) {
   }
 
   return pyResult;
+}
+
+void* Snake::eventToPyHandle(const QSharedPointer<QEventBase>& ev) const {
+  if (!ev) return nullptr;
+
+  const RegisteredType* regType = nullptr;
+
+  // Iterate registry and find the first type whose castFunc succeeds
+  for (const auto& entry : PyTypeRegistry::all()) {
+    const RegisteredType& typeInfo = entry;
+    if (typeInfo.castFunc && typeInfo.castFunc(ev.data())) {
+      regType = &typeInfo;
+      break;
+    }
+  }
+
+  if (!regType)
+    throw std::runtime_error("Unknown event type");
+
+  const QString className = regType->pyName;
+  const auto it = eventClasses_.find(className.toStdString());
+  if (it == eventClasses_.end())
+    throw std::runtime_error("No Python dataclass for " + className.toStdString());
+
+  PyObject* cls = reinterpret_cast<PyObject*>(it->second);
+  PyObject* annotations = PyObject_GetAttrString(cls, "__annotations__");
+  if (!annotations || !PyDict_Check(annotations)) {
+    Py_XDECREF(annotations);
+    PyErr_Print();
+    qWarning() << "Dataclass has no __annotations__";
+    return nullptr;
+  }
+
+  PyObject* dataclassFields = PyObject_GetAttrString(cls, "__dataclass_fields__");
+  if (!dataclassFields || !PyDict_Check(dataclassFields)) {
+    Py_XDECREF(dataclassFields);
+    PyErr_Print();
+    qWarning() << "Dataclass has no __dataclass_fields__";
+    return nullptr;
+  }
+
+  // get static meta-object for Q_GADGET
+  const QMetaObject* metaObj = nullptr;
+
+  for (const auto& entry : PyTypeRegistry::all()) {
+    const RegisteredType& typeInfo = entry;
+    if (typeInfo.castFunc && typeInfo.castFunc(ev.data())) {
+      metaObj = typeInfo.meta;
+      break;
+    }
+  }
+
+  if (!metaObj) {
+    qWarning() << "No metaObject found for event";
+    Py_XDECREF(annotations);
+    return nullptr;
+  }
+
+  PyObject* kwargs = PyDict_New();
+  PyObject *key, *pyType;
+  Py_ssize_t pos = 0;
+
+  while (PyDict_Next(annotations, &pos, &key, &pyType)) {
+    if (!PyUnicode_Check(key)) continue;
+    QString fieldName = PyUnicode_AsUTF8(key);
+
+    const int propIndex = metaObj->indexOfProperty(fieldName.toUtf8().constData());
+    if (propIndex < 0) {
+      qCritical() << "Unknown property in C++ event" << fieldName;
+      continue;
+    }
+
+    QMetaProperty prop = metaObj->property(propIndex);
+    QVariant value = prop.readOnGadget(ev.data());
+    PyObject* pyValue = nullptr;
+
+    // determine Python type name from annotation
+    QString pyTypeName;
+    if (PyType_Check(pyType)) {
+      pyTypeName = reinterpret_cast<PyTypeObject*>(pyType)->tp_name;
+    } else if (PyObject_HasAttrString(pyType, "__name__")) {
+      PyObject* nameObj = PyObject_GetAttrString(pyType, "__name__");
+      if (PyUnicode_Check(nameObj))
+        pyTypeName = PyUnicode_AsUTF8(nameObj);
+      Py_XDECREF(nameObj);
+    }
+
+    // handle QSharedPointer<T> that is actually a known QObject-derived type
+    auto evtIt = eventClasses_.find(pyTypeName.toStdString());
+    if (value.canConvert<QSharedPointer<QObject>>() && !pyTypeName.isEmpty() && evtIt != eventClasses_.end()) {
+      auto obj = value.value<QSharedPointer<QObject>>();
+      if (obj)
+        pyValue = reinterpret_cast<PyObject*>(objectToPyDataclass(obj, pyTypeName));
+    }
+
+    // fallback: convert regular QVariant
+    if (!pyValue)
+      pyValue = convertVariantToPyAccordingToType(value, pyType);
+
+    if (!pyValue) {
+      Py_INCREF(Py_None);
+      pyValue = Py_None;
+    }
+
+    // do not fill kwargs with None for this member when the dataclass member has
+    // a default, or default_factory
+    if (pyValue == Py_None) {
+      PyObject* fieldInfo = PyDict_GetItemString(dataclassFields, fieldName.toUtf8().constData());
+      if (fieldInfo) {
+        PyObject* hasDefault = PyObject_GetAttrString(fieldInfo, "default");
+        PyObject* hasDefaultFactory = PyObject_GetAttrString(fieldInfo, "default_factory");
+        if ((hasDefault && hasDefault != Py_None) || hasDefaultFactory) {
+          Py_DECREF(pyValue);
+          continue;  // skip setting this kwarg, let dataclass factory handle it
+        }
+      }
+    }
+
+    PyDict_SetItemString(kwargs, fieldName.toUtf8().constData(), pyValue);
+    Py_DECREF(pyValue);
+  }
+
+  PyObject* args = PyTuple_New(0);
+  PyObject* instance = PyObject_Call(cls, args, kwargs);
+  Py_DECREF(args);
+  Py_DECREF(kwargs);
+  Py_DECREF(annotations);
+
+  if (!instance) {
+    PyErr_Print();
+    qWarning() << "Failed to create Python dataclass instance for" << className;
+    return nullptr;
+  }
+
+  return reinterpret_cast<void*>(instance);
+}
+
+void* Snake::objectToPyDataclass(const QSharedPointer<QObject>& obj, const QString& className) const {
+  if (!obj) return nullptr;
+
+  const auto it = eventClasses_.find(className.toStdString());
+  if (it == eventClasses_.end()) {
+    qWarning() << "No Python dataclass for" << className;
+    return nullptr;
+  }
+
+  PyObject* cls = reinterpret_cast<PyObject*>(it->second);
+  PyObject* annotations = PyObject_GetAttrString(cls, "__annotations__");
+  if (!annotations || !PyDict_Check(annotations)) {
+    Py_XDECREF(annotations);
+    return nullptr;
+  }
+
+  const QMetaObject* metaObj = obj->metaObject();
+  PyObject* kwargs = PyDict_New();
+
+  PyObject *key, *pyType;
+  Py_ssize_t pos = 0;
+  while (PyDict_Next(annotations, &pos, &key, &pyType)) {
+    if (!PyUnicode_Check(key)) continue;
+    QString fieldName = PyUnicode_AsUTF8(key);
+
+    const int propIndex = metaObj->indexOfProperty(fieldName.toUtf8().constData());
+    if (propIndex < 0) continue;
+
+    QMetaProperty prop = metaObj->property(propIndex);
+    QVariant value = prop.read(obj.data());
+
+    // handle type hints in the dataclass, e.g.: `host: Optional[str] = None`
+    PyObject* actualType = pyType;
+    if (PyObject_HasAttrString(pyType, "__origin__")) {
+      PyObject* origin = PyObject_GetAttrString(pyType, "__origin__");
+      PyObject* args = PyObject_GetAttrString(pyType, "__args__");
+      if (origin && args && PyTuple_Check(args)) {
+        Py_ssize_t n = PyTuple_Size(args);
+        for (Py_ssize_t i = 0; i < n; ++i) {
+          PyObject* t = PyTuple_GetItem(args, i);
+          if (t != Py_None) {
+            actualType = t;
+            break;
+          }
+        }
+      }
+      Py_XDECREF(origin);
+      Py_XDECREF(args);
+    }
+
+    PyObject* pyValue = convertVariantToPyAccordingToType(value, actualType);
+    if (!pyValue) {
+      Py_INCREF(Py_None);
+      pyValue = Py_None;
+    }
+
+    PyDict_SetItemString(kwargs, fieldName.toUtf8().constData(), pyValue);
+    Py_DECREF(pyValue);
+  }
+
+  PyObject* args = PyTuple_New(0);
+  PyObject* instance = PyObject_Call(cls, args, kwargs);
+  Py_DECREF(args);
+  Py_DECREF(kwargs);
+  Py_DECREF(annotations);
+
+  return reinterpret_cast<void*>(instance);
+}
+
+void Snake::updateGadgetFromPyDataclass(void* targetGadget, const QMetaObject* metaObj, void* pyObjHandle) {
+  if (!targetGadget) {
+    qCritical() << "updateGadgetFromPyDataclass: targetGadget is null";
+    return;
+  }
+  if (!metaObj) {
+    qCritical() << "updateGadgetFromPyDataclass: metaObj is null";
+    return;
+  }
+  if (!pyObjHandle) {
+    qCritical() << "updateGadgetFromPyDataclass: pyObjHandle is null";
+    return;
+  }
+
+  PyObject* pyObj = reinterpret_cast<PyObject*>(pyObjHandle);
+
+  // we track mutations on the Python side as to prevent
+  // over-eager updates on the C++ side
+  QStringList dirty_members;
+  // however, the following cannot be tracked easily so oh well
+  const QStringList dirty_ignore = {"QVariantMap", "QVariantList"};
+
+  PyObject* val = PyObject_GetAttrString(pyObj, "_dirty");
+
+  if (val) {
+    if (PySet_Check(val)) {
+      PyObject* iterator = PyObject_GetIter(val);
+      PyObject* item;
+      while ((item = PyIter_Next(iterator))) {
+        dirty_members << PyUnicode_AsUTF8(item);
+        Py_DECREF(item);
+      }
+      Py_DECREF(iterator);
+    }
+    Py_DECREF(val);
+  }
+
+  const char* cppClassName = metaObj->className();
+  QString pyClassName;
+  PyObject* cls = PyObject_GetAttrString(pyObj, "__class__");
+  if (cls) {
+    PyObject* pyClassNameObj = PyObject_GetAttrString(cls, "__name__");
+    if (pyClassNameObj) {
+      pyClassName = QString::fromUtf8(PyUnicode_AsUTF8(pyClassNameObj));
+      Py_DECREF(pyClassNameObj);
+    }
+  }
+
+  PyObject* annotations = PyDict_New();
+  if (!annotations) {
+    qCritical() << "updateGadgetFromPyDataclass: Failed to create annotations dict for class" << cppClassName;
+    return;
+  }
+
+  if (!cls) {
+    qCritical() << "updateGadgetFromPyDataclass: Failed to get __class__ for C++ class" << cppClassName;
+    Py_DECREF(annotations);
+    return;
+  }
+
+  // gather annotations from class + base classes (walk MRO)
+  while (cls) {
+    PyObject* clsAnn = PyObject_GetAttrString(cls, "__annotations__");
+    if (clsAnn && PyDict_Check(clsAnn)) {
+      PyDict_Update(annotations, clsAnn);
+    }
+    Py_XDECREF(clsAnn);
+
+    PyObject* bases = PyObject_GetAttrString(cls, "__bases__");
+    if (!bases || !PyTuple_Check(bases) || PyTuple_Size(bases) == 0)
+      break;
+
+    PyObject* firstBase = PyTuple_GetItem(bases, 0);
+    Py_INCREF(firstBase);
+    Py_DECREF(cls);
+    cls = firstBase;
+    Py_DECREF(bases);
+  }
+
+  PyObject *key, *pyType;
+  Py_ssize_t pos = 0;
+
+  while (PyDict_Next(annotations, &pos, &key, &pyType)) {
+    if (!PyUnicode_Check(key)) {
+      qCritical() << "updateGadgetFromPyDataclass: Annotation key is not a string for class" << cppClassName;
+      continue;
+    }
+
+    QString fieldName = PyUnicode_AsUTF8(key);
+
+    const int propIndex = metaObj->indexOfProperty(fieldName.toUtf8().constData());
+    if (propIndex < 0) {
+      // qCritical() << "updateGadgetFromPyDataclass: Property" << fieldName << "not found in C++ class" << cppClassName;
+      continue;
+    }
+
+    QMetaProperty prop = metaObj->property(propIndex);
+    QString typeName = QString::fromUtf8(prop.metaType().name());
+
+    // handle nested QSharedPointer<T> via TypeRegistry
+    if (typeName.startsWith("QSharedPointer<")) {
+      QVariant currentVar = prop.readOnGadget(targetGadget);
+      if (!currentVar.canConvert<QSharedPointer<QObject>>()) {
+        qCritical() << "Cannot convert property to QSharedPointer<QObject>: field" << fieldName << "in class" << cppClassName;
+        continue;
+      }
+
+      void* currentPtr = currentVar.value<QSharedPointer<QObject>>().data();
+      if (!currentPtr) {
+        qCritical() << "Current pointer is null for field" << fieldName << "in class" << cppClassName;
+        continue;
+      }
+
+      PyObject* nestedPyObj = PyObject_GetAttrString(pyObj, fieldName.toUtf8().constData());
+      if (!nestedPyObj) {
+        qCritical() << "Failed to get nested PyObject for field" << fieldName << "in class" << cppClassName;
+        continue;
+      }
+
+      QString pyTypeName;
+      PyObject* pyTypeNameObj = PyObject_GetAttrString(pyType, "__name__");
+      if (pyTypeNameObj) {
+        pyTypeName = QString::fromUtf8(PyUnicode_AsUTF8(pyTypeNameObj));
+        Py_DECREF(pyTypeNameObj);
+      }
+
+      const QMetaObject* nestedMeta = PyTypeRegistry::metaForPy(pyTypeName);
+      if (nestedMeta) {
+        updateGadgetFromPyDataclass(currentPtr, nestedMeta, nestedPyObj);
+      } else {
+        qCritical() << "Nested type not found in TypeRegistry:" << pyTypeName << "for field" << fieldName << "in class" << cppClassName;
+      }
+
+      Py_DECREF(nestedPyObj);
+      continue;
+    }
+
+    // skip non-dirty members, unless they are dict/list as those cannot be dirty-tracked
+    if (!dirty_members.contains(fieldName) && !dirty_ignore.contains(typeName))
+      continue;
+
+    // regular property types
+    PyObject* pyValue = PyObject_GetAttrString(pyObj, fieldName.toUtf8().constData());
+    if (!pyValue) {
+      qCritical() << "Failed to get PyObject attribute:" << fieldName << "in class" << cppClassName;
+      continue;
+    }
+
+    QVariant value = convertPyObjectToVariant(pyValue);
+    // qDebug() << "writing" << fieldName;
+    if (!prop.writeOnGadget(targetGadget, value)) {
+      qCritical() << "Failed to write property:" << fieldName << "in class" << cppClassName;
+    }
+
+    Py_DECREF(pyValue);
+  }
+
+  Py_DECREF(cls);
+  Py_DECREF(annotations);
 }

@@ -1,4 +1,5 @@
 #pragma once
+
 // do not include Python.h here, only in .cpp
 #include <QObject>
 #include <QString>
@@ -10,6 +11,8 @@
 #include "module.h"
 
 struct ThreadInterp;
+struct _object;
+using PyObjectHandle = _object*;
 class Snake final : public QObject {
 Q_OBJECT
 
@@ -37,15 +40,21 @@ public slots:
   void start();
 
   // must be Q_INVOKABLE for invokeMethod
-  Q_INVOKABLE [[nodiscard]] QVariant executeFunction(const QString &funcName, const QVariantList &args) const;
+  Q_INVOKABLE [[nodiscard]] QVariant executeFunction(const QString &funcName, const QVariantList &args);
 
 signals:
   void started(bool ok);
 
 private:
   ThreadInterp* interp_;
+  std::unordered_map<std::string, PyObjectHandle> eventClasses_;
+
+  void* eventToPyHandle(const QSharedPointer<QEventBase>& ev) const;
 
   // used by variadic template (callFunction())
   QVariant callFunctionList(const QString &funcName, const QVariantList &args);
+
+  void* objectToPyDataclass(const QSharedPointer<QObject>& obj, const QString& className) const;
+  void updateGadgetFromPyDataclass(void* targetGadget, const QMetaObject* metaObj, void* pyObjHandle);
 };
 

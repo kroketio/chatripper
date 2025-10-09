@@ -12,7 +12,7 @@ void Utils::init() {
   g::homeDir = QDir::homePath();
   // g::configDirectory = QString("%1/.config/%2/").arg(g::configRoot, QCoreApplication::applicationName());
   g::configDirectory = g::configDirectory = QDir(QDir::currentPath()).filePath("data/");
-  g::pythonModulesDirectory = g::configDirectory + "scripts/";
+  g::pythonModulesDirectory = g::configDirectory + "modules/";
   g::uploadsDirectory = g::configDirectory + "uploads/";
   g::staticDirectory = g::configDirectory + "static/";
   g::cacheDirectory = QString("%1/cache").arg(g::configDirectory);

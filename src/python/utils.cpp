@@ -1,5 +1,22 @@
 #include "utils.h"
 
+QString GetStr(PyObject *dict, const char *name) {
+  PyObject *val = PyDict_GetItemString(dict, name);
+  return val && PyUnicode_Check(val) ? QString::fromUtf8(PyUnicode_AsUTF8(val)) : QString();
+}
+
+bool GetBool(PyObject *dict, const char *name) {
+  PyObject *val = PyDict_GetItemString(dict, name);
+  return val && PyObject_IsTrue(val);
+}
+
+QByteArray GetBytes(PyObject *dict, const char *name) {
+  PyObject *val = PyDict_GetItemString(dict, name);
+  if (val && PyBytes_Check(val))
+    return {PyBytes_AsString(val), PyBytes_Size(val)};
+  return {};
+}
+
 // QVariant -> PyObject* (recursive)
 PyObject* QVariantToPyObject(const QVariant &var) {
   switch (var.typeId()) {
@@ -54,7 +71,6 @@ PyObject* QVariantToPyObject(const QVariant &var) {
   }
 }
 
-
 // PyObject* -> QVariant (recursive)
 QVariant PyObjectToQVariant(PyObject *obj) {
   if (PyLong_Check(obj)) {
@@ -84,40 +100,6 @@ QVariant PyObjectToQVariant(PyObject *obj) {
     return map;
   }
 
-  else if (PyObject_HasAttrString(obj, "__dataclass_fields__")) {
-    PyObject *cls = PyObject_GetAttrString(obj, "__class__");
-    QString className;
-    if (cls) {
-      PyObject *name = PyObject_GetAttrString(cls, "__name__");
-      if (name) {
-        className = QString::fromUtf8(PyUnicode_AsUTF8(name));
-        Py_DECREF(name);
-      }
-      Py_DECREF(cls);
-    }
-
-    if (className == "Message") {
-      return QVariant::fromValue(PyDataclassToQMessage(obj));
-    } else if (className == "AuthUserResult") {
-      return QVariant::fromValue(PyDataclassToQAuthUserResult(obj));
-    } else {
-      // fallback: return __dict__ as QVariantMap
-      PyObject *dict = PyObject_GetAttrString(obj, "__dict__");
-      if (dict && PyDict_Check(dict)) {
-        QVariantMap map;
-        PyObject *key, *value;
-        Py_ssize_t pos = 0;
-        while (PyDict_Next(dict, &pos, &key, &value)) {
-          QString qkey = QString::fromUtf8(PyUnicode_AsUTF8(key));
-          map[qkey] = PyObjectToQVariant(value);
-        }
-        Py_DECREF(dict);
-        return map;
-      }
-      Py_XDECREF(dict);
-    }
-  }
-
   else if (obj == Py_None) {
     return {};
   }
@@ -125,70 +107,115 @@ QVariant PyObjectToQVariant(PyObject *obj) {
   return QString("<unsupported type>");
 }
 
-QMessage PyDataclassToQMessage(PyObject *obj) {
-  QMessage m;
-
-  PyObject *dict = PyObject_GetAttrString(obj, "__dict__");
-  if (!dict || !PyDict_Check(dict))
-    return m;
-
-  auto getStr = [&](const char *name) -> QString {
-    PyObject *val = PyDict_GetItemString(dict, name);
-    return (val && PyUnicode_Check(val)) ? QString::fromUtf8(PyUnicode_AsUTF8(val)) : QString();
-  };
-
-  auto getBool = [&](const char *name) -> bool {
-    PyObject *val = PyDict_GetItemString(dict, name);
-    return val && PyObject_IsTrue(val);
-  };
-
-  auto getBytes = [&](const char *name) -> QByteArray {
-    PyObject *val = PyDict_GetItemString(dict, name);
-    if (val && PyBytes_Check(val))
-      return QByteArray(PyBytes_AsString(val), PyBytes_Size(val));
-    return {};
-  };
-
-  m.id          = getBytes("id");
-  m.nick        = getBytes("nick");
-  m.user        = getBytes("user");
-  m.host        = getBytes("host");
-  m.text        = getStr("text").toUtf8();
-  m.raw         = getBytes("raw");
-  m.from_server = getBool("from_server");
-
-  PyObject *tagsObj = PyDict_GetItemString(dict, "tags");
-  if (tagsObj)
-    m.tags = PyObjectToQVariant(tagsObj).toMap();
-
-  PyObject *targetsObj = PyDict_GetItemString(dict, "targets");
-  if (targetsObj)
-    m.targets = PyObjectToQVariant(targetsObj).toStringList();
-
-  PyObject *accObj = PyDict_GetItemString(dict, "account");
-  if (accObj)
-    m.account = PyObjectToQVariant(accObj);
-
-  Py_XDECREF(dict);
-  return m;
+PyObject* convertListToPy(const QVariantList& list, PyObject* elemType) {
+  PyObject* pyList = PyList_New(list.size());
+  for (int i = 0; i < list.size(); ++i) {
+    PyObject* item = convertVariantToPyAccordingToType(list[i], elemType);
+    PyList_SetItem(pyList, i, item); // steals reference
+  }
+  return pyList;
 }
 
-QAuthUserResult PyDataclassToQAuthUserResult(PyObject *obj) {
-  QAuthUserResult r;
-
-  PyObject *dict = PyObject_GetAttrString(obj, "__dict__");
-  if (!dict || !PyDict_Check(dict))
-    return r;
-
-  PyObject *res = PyDict_GetItemString(dict, "result");
-  if (res)
-    r.result = PyObject_IsTrue(res);
-
-  PyObject *reason = PyDict_GetItemString(dict, "reason");
-  if (reason && PyUnicode_Check(reason))
-    r.reason = PyUnicode_AsUTF8(reason);
-
-  Py_XDECREF(dict);
-  return r;
+PyObject* convertMapToPy(const QVariantMap& map, PyObject* valueType) {
+  PyObject* pyDict = PyDict_New();
+  for (auto it = map.begin(); it != map.end(); ++it) {
+    PyObject* k = PyUnicode_FromString(it.key().toUtf8().constData());
+    PyObject* v = convertVariantToPyAccordingToType(it.value(), valueType);
+    PyDict_SetItem(pyDict, k, v);
+    Py_DECREF(k);
+    Py_DECREF(v);
+  }
+  return pyDict;
 }
 
+PyObject* convertVariantToPyAccordingToType(const QVariant& value, PyObject* pyType) {
+  if (pyType == reinterpret_cast<PyObject*>(&PyUnicode_Type)) {
+    if (value.canConvert<QString>()) return PyUnicode_FromString(value.toString().toUtf8().constData());
+    else if (value.canConvert<QByteArray>()) return PyUnicode_FromString(value.toByteArray().constData());
+  }
+  else if (pyType == reinterpret_cast<PyObject*>(&PyBytes_Type)) {
+    if (value.canConvert<QByteArray>()) {
+      QByteArray ba = value.toByteArray();
+      return PyBytes_FromStringAndSize(ba.constData(), ba.size());
+    }
+  }
+  else if (pyType == reinterpret_cast<PyObject*>(&PyBool_Type)) return PyBool_FromLong(value.toBool());
+  else if (pyType == reinterpret_cast<PyObject*>(&PyLong_Type)) return PyLong_FromLongLong(value.toLongLong());
+  else if (pyType == reinterpret_cast<PyObject*>(&PyFloat_Type)) return PyFloat_FromDouble(value.toDouble());
+  else if (PyList_Check(pyType) && value.metaType().id() == QMetaType::QVariantList)
+    return convertListToPy(value.toList(), PyTuple_GetItem(pyType, 0));
+  else if (PyDict_Check(pyType) && value.metaType().id() == QMetaType::QVariantMap)
+    return convertMapToPy(value.toMap(), PyTuple_GetItem(pyType, 1));
+
+  Py_INCREF(Py_None);
+  return Py_None;
+}
+
+QVariant convertPyObjectToVariant(PyObject* obj) {
+  if (!obj) return QVariant();
+
+  // none
+  if (obj == Py_None) return QVariant();
+
+  // basic types
+  if (PyBool_Check(obj)) return QVariant(static_cast<bool>(PyObject_IsTrue(obj)));
+  if (PyLong_Check(obj)) return QVariant(static_cast<qlonglong>(PyLong_AsLongLong(obj)));
+  if (PyFloat_Check(obj)) return QVariant(PyFloat_AsDouble(obj));
+  if (PyUnicode_Check(obj)) {
+    return QVariant(QString::fromUtf8(PyUnicode_AsUTF8(obj)));
+  }
+  if (PyBytes_Check(obj)) {
+    char* data = nullptr;
+    Py_ssize_t size = 0;
+    if (PyBytes_AsStringAndSize(obj, &data, &size) == 0 && data != nullptr) {
+      return QVariant(QByteArray(data, static_cast<int>(size)));
+    }
+    return QVariant(); // fallback if error
+  }
+
+  // list
+  if (PyList_Check(obj)) {
+    QVariantList list;
+    Py_ssize_t len = PyList_Size(obj);
+    for (Py_ssize_t i = 0; i < len; ++i) {
+      PyObject* item = PyList_GetItem(obj, i); // borrowed reference
+      list.append(convertPyObjectToVariant(item));
+    }
+    return list;
+  }
+
+  // dict
+  if (PyDict_Check(obj)) {
+    QVariantMap map;
+    PyObject *key, *value;
+    Py_ssize_t pos = 0;
+    while (PyDict_Next(obj, &pos, &key, &value)) {
+      if (!PyUnicode_Check(key)) continue;
+      QString k = PyUnicode_AsUTF8(key);
+      map.insert(k, convertPyObjectToVariant(value));
+    }
+    return map;
+  }
+
+  // nested dataclass (has __annotations__)
+  if (PyObject_HasAttrString(obj, "__annotations__")) {
+    QVariantMap map;
+    PyObject* annotations = PyObject_GetAttrString(obj, "__annotations__");
+    if (annotations && PyDict_Check(annotations)) {
+      PyObject *key, *pyType;
+      Py_ssize_t pos = 0;
+      while (PyDict_Next(annotations, &pos, &key, &pyType)) {
+        if (!PyUnicode_Check(key)) continue;
+        QString fieldName = PyUnicode_AsUTF8(key);
+        PyObject* fieldValue = PyObject_GetAttrString(obj, fieldName.toUtf8().constData());
+        map.insert(fieldName, convertPyObjectToVariant(fieldValue));
+        Py_XDECREF(fieldValue);
+      }
+    }
+    Py_XDECREF(annotations);
+    return map;
+  }
+
+  // unknown type
+  return QVariant();
+}

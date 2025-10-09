@@ -22,13 +22,19 @@ class Channel;
 
 class Account final : public QObject {
 Q_OBJECT
+Q_PROPERTY(QByteArray name READ name WRITE setName NOTIFY nickChanged)
+Q_PROPERTY(QByteArray uid READ uid WRITE setUID)
+Q_PROPERTY(QByteArray password READ password WRITE setPassword)
+Q_PROPERTY(QByteArray nick READ nick WRITE setNick NOTIFY nickChanged)
+Q_PROPERTY(QByteArray host READ host WRITE setHost)
+Q_PROPERTY(QDateTime creation_date MEMBER creation_date)
 
 public:
   explicit Account(const QByteArray& account_name = "", QObject* parent = nullptr);
   static QSharedPointer<Account> create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation);
   static QSharedPointer<Account> create();
 
-  QAuthUserResult verifyPassword(const QByteArray &password_candidate, const QHostAddress& ip) const;
+  QSharedPointer<QEventAuthUser> verifyPassword(const QSharedPointer<QEventAuthUser> &auth) const;
 
   static QSharedPointer<Account> get_by_uid(const QByteArray &uid);
   static QSharedPointer<Account> get_by_name(const QByteArray &name);
@@ -36,7 +42,7 @@ public:
 
   void merge(const QSharedPointer<Account> &from);
 
-  void message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, QSharedPointer<QMessage> &message);
+  void message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, QSharedPointer<QEventMessage> &message);
 
   void setRandomUID();
 
@@ -73,8 +79,6 @@ public:
   [[nodiscard]] bool login(const QString& username, const QString& password) { return true; }
   [[nodiscard]] bool is_logged_in() { return !m_name.isEmpty(); }
 
-  static void channel_join(QSharedPointer<Account> &acc, const QByteArray& channel_name);
-  static void channel_part(QSharedPointer<Account> &acc, const QByteArray& channel_name, const QByteArray& message);
   void broadcast_nick_changed(const QByteArray& msg) const;
 
   void add_channel(const QByteArray &channel);

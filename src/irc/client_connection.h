@@ -58,8 +58,7 @@ namespace irc {
     QMap<QByteArray, QSharedPointer<Channel>> channels;
     QMap<QSharedPointer<Channel>, QSet<QSharedPointer<Account>>> channel_members;
 
-    void channel_join(const QSharedPointer<Channel> &channel, const QSharedPointer<Account> &account, const QByteArray &password);
-    void channel_join(const QByteArray &channel_name, const QByteArray &password);
+    void channel_join(const QSharedPointer<QEventChannelJoin> &event);
     void channel_send_topic(const QByteArray &channel_name, const QByteArray &topic);
 
     // QByteArray nickname() const { return nick; }
@@ -76,8 +75,8 @@ namespace irc {
     bool change_nick(const QByteArray &new_nick);
     bool change_nick(const QSharedPointer<Account> &acc, const QByteArray &old_nick, const QByteArray &new_nick);
 
-    void self_message(const QByteArray& target, const QSharedPointer<QMessage> &message) const;
-    void message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QMessage> &message) const;
+    void self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message) const;
+    void message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QEventMessage> &message) const;
 
     void change_host(const QSharedPointer<Account> &acc, const QByteArray &new_host);
     void change_host(const QByteArray &new_host);

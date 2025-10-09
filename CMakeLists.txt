@@ -59,7 +59,6 @@ file(GLOB SOURCE_FILES
 add_subdirectory(src/lib/logger_std)
 
 add_executable(circa
-    src/main.cpp
     ${SOURCE_FILES}
 )
 
