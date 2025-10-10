@@ -6,6 +6,8 @@
 #include <QSet>
 #include <QPointer>
 #include <QMutexLocker>
+#include <QWriteLocker>
+#include <QReadLocker>
 #include <QElapsedTimer>
 #include <QHash>
 
@@ -47,13 +49,29 @@ namespace irc {
     bool logged_in = false;
 
     // disconnect slow setup/register
-    [[nodiscard]] time_t time_connection_established() const { return m_time_connection_established; }
-    // disconnect slow activity
-    [[nodiscard]] time_t time_last_activity() const { return m_last_activity; }
+    [[nodiscard]] time_t time_connection_established() const {
+      QReadLocker rlock(&mtx_lock);
+      return m_time_connection_established;
+    }
 
-    QByteArray nick;
+    // disconnect slow activity
+    [[nodiscard]] time_t time_last_activity() const {
+      QReadLocker rlock(&mtx_lock);
+      return m_last_activity;
+    }
+
     QByteArray user;
     QByteArray realname;
+
+    void setNick(const QByteArray &new_nick) {
+      QWriteLocker wlock(&mtx_lock);
+      m_nick = new_nick;
+    }
+
+    QByteArray nick() {
+      QReadLocker rlock(&mtx_lock);
+      return m_nick;
+    }
 
     QMap<QByteArray, QSharedPointer<Channel>> channels;
     QMap<QSharedPointer<Channel>, QSet<QSharedPointer<Account>>> channel_members;
@@ -75,7 +93,7 @@ namespace irc {
     bool change_nick(const QByteArray &new_nick);
     bool change_nick(const QSharedPointer<Account> &acc, const QByteArray &old_nick, const QByteArray &new_nick);
 
-    void self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message) const;
+    void self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message);
     void message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QEventMessage> &message) const;
 
     void change_host(const QSharedPointer<Account> &acc, const QByteArray &new_host);
@@ -87,7 +105,7 @@ namespace irc {
     static QList<QByteArray> split_irc(const QByteArray &line);
 
     void disconnect() const;
-    QByteArray prefix() const;
+    QByteArray prefix();
 
   signals:
     void sendData(const QByteArray &data) const;
@@ -99,7 +117,7 @@ namespace irc {
   public slots:
     void onWrite(const QByteArray &data) const;
   private:
-    mutable QMutex mtx_lock;
+    mutable QReadWriteLock mtx_lock;
     QTimer* m_inactivityTimer = nullptr;
 
     void parseIncoming(QByteArray &line);
@@ -117,7 +135,7 @@ namespace irc {
     void handleLUSERS(const QList<QByteArray> &args);
     void handleMODE(const QList<QByteArray> &args);
     void handleCAP(const QList<QByteArray> &args);
-    void handleMOTD(const QList<QByteArray> &args) const;
+    void handleMOTD(const QList<QByteArray> &args);
     void handleAUTHENTICATE(const QList<QByteArray> &args);
     void handleWHOIS(const QList<QByteArray> &args);
     void handleWHO(const QList<QByteArray> &args);
@@ -135,6 +153,7 @@ namespace irc {
     // only used during connection setup
     bool user_already_exists = false;
 
+    QByteArray m_nick;
     QByteArray m_buffer;
     QByteArray m_passGiven;
     QByteArray m_host;

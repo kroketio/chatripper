@@ -169,10 +169,12 @@ namespace irc {
 
     const QByteArray target = args.at(0);
 
+    auto _nick = nick();
+
     // --- MODE <target> (query) ---
     if (args.size() == 1) {
       // USER query
-      if (target == nick) {
+      if (target == _nick) {
         QString present;
         for (auto it = userModesLookup.constBegin(); it != userModesLookup.constEnd(); ++it) {
           const irc::UserModes mode = it.key();
@@ -181,9 +183,9 @@ namespace irc {
             present += letter;
         }
         if (!present.isEmpty()) {
-          send_raw("MODE " + nick + " :" + present.toUtf8());
+          send_raw("MODE " + _nick + " :" + present.toUtf8());
         } else {
-          send_raw("MODE " + nick + " :"); // empty
+          send_raw("MODE " + _nick + " :"); // empty
         }
         return;
       }
@@ -213,9 +215,9 @@ namespace irc {
         }
 
         if (!present.isEmpty()) {
-          send_raw("324 " + nick + " #" + channel->name() +" :" + ("+" + present).toUtf8() + params);
+          send_raw("324 " + _nick + " #" + channel->name() +" :" + ("+" + present).toUtf8() + params);
         } else {
-          send_raw("324 " + nick + " #" + channel->name() +" :");
+          send_raw("324 " + _nick + " #" + channel->name() +" :");
         }
         return;
       }
@@ -233,7 +235,7 @@ namespace irc {
     QString result;
 
     // USER MODE change
-    if (target == nick) {
+    if (target == _nick) {
       bool invalid = false;
       for (int i = 1; i < requested_modes.size(); ++i) {
         QChar letter = requested_modes[i];
@@ -255,7 +257,7 @@ namespace irc {
 
       if (!result.isEmpty()) {
         const QByteArray modePrefix = adding ? "+" : "-";
-        send_raw("MODE " + nick + " :" + modePrefix + result.toUtf8());
+        send_raw("MODE " + _nick + " :" + modePrefix + result.toUtf8());
       } else {
         return reply_num(501, "Unknown MODE flag");
       }
@@ -343,7 +345,7 @@ namespace irc {
     }
 
     // finally update the bit in user_modes
-    QMutexLocker locker(&mtx_lock);
+    QWriteLocker locker(&mtx_lock);
     if (adding) user_modes.set(mode);
     else user_modes.clear(mode);
   }
@@ -362,8 +364,12 @@ namespace irc {
       return;
     }
 
+    const auto& new_nick = args.first();
+    setNick(new_nick);
+
     if (!m_account->setNick(args.at(0))) {
-      reply_num(433, nick + " :Nickname is already in use");
+      auto _nick = nick();
+      reply_num(433, _nick + " :Nickname is already in use");
     } else {
       setup_tasks.clear(ConnectionSetupTasks::NICK);
       try_finalize_setup();
@@ -402,10 +408,10 @@ namespace irc {
   }
 
   void client_connection::channel_send_topic(const QByteArray &channel_name, const QByteArray &topic) {
-    QMutexLocker locker(&mtx_lock);
+    QReadLocker locker(&mtx_lock);
   }
 
-  void client_connection::self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message) const {
+  void client_connection::self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message) {
     if (capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE)) {
       const QByteArray msg = ":" + prefix() + " PRIVMSG " + target + " :" + message->text + "\r\n";
       emit sendData(msg);
@@ -420,6 +426,7 @@ namespace irc {
   void client_connection::channel_join(const QSharedPointer<QEventChannelJoin> &event) {
     if (event.isNull()) return;
 
+    const auto _nick = nick();
     const auto &account = event->account;
     const auto &channel = event->channel;
 
@@ -437,10 +444,11 @@ namespace irc {
       const QByteArray msg = ":" + acc_prefix + " JOIN :#" + channel->name() + "\r\n";
       emit sendData(msg);
 
-      QMutexLocker locker(&mtx_lock);
+      QWriteLocker locker(&mtx_lock);
       if (!channel_members.contains(channel))
         channel_members[channel] = {};
       channel_members[channel] << account;
+      locker.unlock();
 
       return;
     }
@@ -449,7 +457,7 @@ namespace irc {
 
     // this connection is already in the channel
     // @TODO: move `channels` mutations to setters/getters+lock
-    QMutexLocker locker(&mtx_lock);
+    QWriteLocker locker(&mtx_lock);
     if (channels.contains(channel_name))
       return;
     if (!channel_members.contains(channel))
@@ -469,7 +477,7 @@ namespace irc {
     } else {
       // :irc.local 333 bla #test bbb!dsc@127.0.0.1 :1758051783.
       // @TODO: implement RPL_TOPICWHOTIME^
-      send_raw("332 " + nick + " #" + channel_name + " :" + channel->topic());
+      send_raw("332 " + _nick + " #" + channel_name + " :" + channel->topic());
     }
 
     // names
@@ -483,9 +491,9 @@ namespace irc {
         names << acc->nick();
     }
 
-    const QByteArray namesPrefix = "353 " + nick + " = " + channel->name() + " :";
+    const QByteArray namesPrefix = "353 " + _nick + " = " + channel->name() + " :";
     send_raw(namesPrefix + names.join(" "));
-    send_raw("366 " + nick + " " + "#" + channel->name() + " :End of NAMES list");
+    send_raw("366 " + _nick + " " + "#" + channel->name() + " :End of NAMES list");
   }
 
   void client_connection::channel_part(const QSharedPointer<Account> &account, const QSharedPointer<Channel> &channel, const QByteArray &message) {
@@ -495,7 +503,7 @@ namespace irc {
     const QByteArray msg = ":" + acc_prefix + " PART #" + channel->name() + reason + "\r\n";
     emit sendData(msg);
 
-    QMutexLocker locker(&mtx_lock);
+    QWriteLocker locker(&mtx_lock);
     if (channel_members.contains(channel))
       channel_members.remove(channel);
   }
@@ -504,7 +512,7 @@ namespace irc {
     // local bookkeeping
     const auto ptr = Channel::get(channel_name);
 
-    QMutexLocker locker(&mtx_lock);
+    QWriteLocker locker(&mtx_lock);
     channel_members.remove(ptr);
     channels.remove(channel_name);
     locker.unlock();
@@ -542,6 +550,8 @@ namespace irc {
       return;
     }
 
+    const auto _nick = nick();
+
     // channels list
     auto chans = args.at(0).split(',');
 
@@ -560,7 +570,7 @@ namespace irc {
       if (!chan_ptr.isNull())
         chan_ptr->part(m_account, message);
       else
-        send_raw("442 " + nick + " " + channel_name + " :You're not on that channel");
+        send_raw("442 " + _nick + " " + channel_name + " :You're not on that channel");
     }
   }
 
@@ -574,6 +584,7 @@ namespace irc {
       return;
     }
 
+    const auto _nick = nick();
     const QByteArray target = args[0];
     const QByteArray text = args[1];
 
@@ -581,7 +592,7 @@ namespace irc {
     msg->account = m_account;
     msg->text = text;
     msg->from_system = false;
-    msg->nick = nick;
+    msg->nick = _nick;
     msg->raw = args.join(" ");
     msg->user = user;
     msg->host = m_host;
@@ -589,7 +600,7 @@ namespace irc {
     if (target.startsWith('#')) {
       const auto chan_ptr = Channel::get(target.mid(1));
       if (chan_ptr.isNull()) {
-        send_raw("401 " + nick + " " + target + " :No such nick/channel");
+        send_raw("401 " + _nick + " " + target + " :No such nick/channel");
         return;
       }
 
@@ -597,7 +608,7 @@ namespace irc {
       chan_ptr->message(this, m_account, msg);
     } else {
       if (!g::ctx->irc_nicks.contains(target)) {
-        send_raw("401 " + nick + " " + target + " :No such nick/channel");
+        send_raw("401 " + _nick + " " + target + " :No such nick/channel");
         return;
       }
 
@@ -735,14 +746,15 @@ namespace irc {
   }
 
   bool client_connection::change_nick(const QByteArray &new_nick) {
+    setNick(new_nick);
+
     const QByteArray msg = ":" + prefix() + " NICK :" + new_nick + "\r\n";
     emit sendData(msg);
     return true;
   }
 
   bool client_connection::change_nick(const QSharedPointer<Account> &acc, const QByteArray &old_nick, const QByteArray &new_nick) {
-    if (!nick.isEmpty() && new_nick == nick)
-      return true;
+    setNick(new_nick);
 
     const auto _prefix = acc->prefix(0);
     if (_prefix.isEmpty()) {
@@ -769,13 +781,15 @@ namespace irc {
   }
 
   void client_connection::reply_num(const int code, const QByteArray &text) {
-    const QByteArray target = nick.isEmpty() ? "*" : nick;
+    auto const _nick = nick();
+    const QByteArray target = _nick.isEmpty() ? "*" : _nick;
     const QByteArray line = QByteArray::number(code).rightJustified(3, '0') + " " + target + " :" + text;
     send_raw(line);
   }
 
-  QByteArray client_connection::prefix() const {
-    return nick + "!" + (user.isEmpty() ? QByteArray("user") : user) + "@" + m_host;
+  QByteArray client_connection::prefix() {
+    auto const _nick = nick();
+    return _nick + "!" + (user.isEmpty() ? QByteArray("user") : user) + "@" + m_host;
   }
 
   void client_connection::reply_self(const QByteArray &command, const QByteArray &args) {
@@ -821,8 +835,9 @@ namespace irc {
   }
 
   void client_connection::onSocketDisconnected() {
-    m_account->onConnectionDisconnected(this, nick);
-    emit disconnected(nick);
+    auto const _nick = nick();
+    m_account->onConnectionDisconnected(this, _nick);
+    emit disconnected(_nick);
   }
 
   void client_connection::try_finalize_setup() {
@@ -842,19 +857,21 @@ namespace irc {
       }
     }
 
+    auto const _nick = nick();
+
     reply_num(1, "Hi, welcome to IRC");
     reply_num(2, "Your host is " + ThreadedServer::serverName() + ", running version cIRCa-0.1");
     reply_num(3, "This server was created Dec 21 1989 at 13:37:00 (lie)");
     reply_num(4, ThreadedServer::serverName() + " wut-7.2.2+bla.7.3 what is this.");
 
-    const QByteArray line = "005 " + nick + " BOT=b CASEMAPPING=ascii CHANNELLEN=64 CHANTYPES=# ELIST=U EXCEPTS EXTBAN=,m :are supported by this server";
+    const QByteArray line = "005 " + _nick + " BOT=b CASEMAPPING=ascii CHANNELLEN=64 CHANTYPES=# ELIST=U EXCEPTS EXTBAN=,m :are supported by this server";
     send_raw(line);
 
     handleLUSERS({});
     handleMOTD({});
 
     if (logged_in)
-      handleMODE({nick, "+r"});
+      handleMODE({_nick, "+r"});
 
     for (const auto& channel : m_account->channels) {
       auto event = QSharedPointer<QEventChannelJoin>(new QEventChannelJoin);
@@ -922,10 +939,11 @@ namespace irc {
     m_socket->disconnectFromHost();
   }
 
-  void client_connection::handleMOTD(const QList<QByteArray> &) const {
-    send_raw("375 " + nick + " :- " + ThreadedServer::serverName() + " Message of the day -");
-    send_raw("372 " + nick + " :- " + (m_server->motd().isEmpty() ? QByteArray("Welcome!") : m_server->motd()));
-    send_raw("376 " + nick + " :End of MOTD command.");
+  void client_connection::handleMOTD(const QList<QByteArray> &) {
+    auto const _nick = nick();
+    send_raw("375 " + _nick + " :- " + ThreadedServer::serverName() + " Message of the day -");
+    send_raw("372 " + _nick + " :- " + (m_server->motd().isEmpty() ? QByteArray("Welcome!") : m_server->motd()));
+    send_raw("376 " + _nick + " :End of MOTD command.");
   }
 
   void client_connection::handleWHO(const QList<QByteArray> &) {

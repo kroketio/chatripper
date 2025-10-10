@@ -121,7 +121,7 @@ QByteArray Account::nick() {
     return m_nick;
 
   for (const auto& conn: connections) {
-    return conn->nick;
+    return conn->nick();
   }
 
   return {};
@@ -185,27 +185,19 @@ bool Account::setNick(const QByteArray &nick) {
     for (const auto& acc: l) {
       if (acc != self) {
         for (const auto&conn : acc->connections) {
-          QMetaObject::invokeMethod(
-            conn,
+          QMetaObject::invokeMethod(conn,
             [conn, self, nick_old, nick] {
               conn->change_nick(self, nick_old, nick);
-            },
-            Qt::QueuedConnection
-          );
+            }, Qt::QueuedConnection);
         }
       }
     }
 
     for (const auto& conn: connections) {
-      QMetaObject::invokeMethod(
-          conn,
-          [=] {
-            conn->change_nick(m_nick);
-          },
-          Qt::QueuedConnection
-      );
-
-      conn->nick = m_nick;
+      QMetaObject::invokeMethod(conn,
+        [=] {
+          conn->change_nick(m_nick);
+        }, Qt::QueuedConnection);
     }
   }
 
