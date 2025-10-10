@@ -418,8 +418,22 @@ namespace irc {
     }
   }
 
-  void client_connection::message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QEventMessage> &message) const {
-    const QByteArray msg = ":" + src->prefix(0) + " PRIVMSG " + target + " :" + message->text + "\r\n";
+  void client_connection::message(
+      const QSharedPointer<Account> &src,
+      const QByteArray& target,
+      const QSharedPointer<QEventMessage> &message
+  ) const {
+    QByteArray tag_prefix;
+
+    if (capabilities.has(PROTOCOL_CAPABILITY::ACCOUNT_TAG)) {
+      if (!src.isNull()) {
+        const QByteArray src_username = src->name();
+        if (!src_username.isEmpty())
+          tag_prefix = "@account=" + src_username + " ";
+      }
+    }
+
+    const QByteArray msg = tag_prefix + ":" + src->prefix(0) + " PRIVMSG " + target + " :" + message->text + "\r\n";
     emit sendData(msg);
   }
 
@@ -574,10 +588,6 @@ namespace irc {
     }
   }
 
-  // @TODO: support account-tag https://ircv3.net/specs/extensions/account-tag
-  // it prefixes the owner of the account who sent this message
-  // e.g. @account=Alice :Bob!bob@example.com PRIVMSG #channel :Hello
-  // The tag MUST be added by the ircd to all commands sent by a user (e.g. PRIVMSG, MODE, NOTICE, and all others).
   void client_connection::handlePRIVMSG(const QList<QByteArray> &args) {
     if (args.size() < 2) {
       reply_num(461, "PRIVMSG :Not enough parameters");
