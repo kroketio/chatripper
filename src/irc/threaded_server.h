@@ -5,7 +5,10 @@
 #include <QHostAddress>
 #include <QMutex>
 #include <QThread>
+#include <QFileInfo>
+#include <QReadWriteLock>
 
+#include "lib/globals.h"
 #include "worker.h"
 
 namespace irc {
@@ -21,7 +24,7 @@ namespace irc {
 
     QByteArray password() const { return m_password; }
     static QByteArray serverName();
-    QByteArray motd() const { return m_motd; }
+    QByteArray motd();
     QStringList capabilities;
 
     QHash<QHostAddress,int> activeConnections;
@@ -31,6 +34,7 @@ namespace irc {
     void incomingConnection(qintptr socketDescriptor) override;
 
   private:
+    void reloadMotd();
     void setup_pool(int thread_count);
 
     int m_max_per_ip;
@@ -38,6 +42,7 @@ namespace irc {
     QByteArray m_motd;
 
   private:
+    mutable QReadWriteLock mtx_lock;
     QList<QThread*> m_thread_pool;
     short m_thread_count;
     QList<Worker*> m_workers;

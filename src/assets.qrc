@@ -3,5 +3,6 @@
   <file alias="qircd.py">python/qircd/qircd.py</file>
   <file alias="models.py">python/qircd/models.py</file>
   <file alias="events.py">python/qircd/events.py</file>
+  <file alias="motd.txt">irc/files/motd.txt</file>
 </qresource>
 </RCC>

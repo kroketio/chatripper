@@ -941,8 +941,26 @@ namespace irc {
 
   void client_connection::handleMOTD(const QList<QByteArray> &) {
     auto const _nick = nick();
+    const QByteArray motd_text = m_server->motd().isEmpty() ? QByteArray("Welcome!") : m_server->motd();
+
+    // MOTD end
     send_raw("375 " + _nick + " :- " + ThreadedServer::serverName() + " Message of the day -");
-    send_raw("372 " + _nick + " :- " + (m_server->motd().isEmpty() ? QByteArray("Welcome!") : m_server->motd()));
+
+    const QList<QByteArray> lines = motd_text.split('\n');
+    for (const QByteArray &rawLine : lines) {
+      QByteArray line = rawLine.trimmed();
+
+      // chunks
+      int pos = 0;
+      while (pos < line.size()) {
+        constexpr int MAX_CONTENT_LEN = 400;
+        QByteArray chunk = line.mid(pos, MAX_CONTENT_LEN);
+        send_raw("372 " + _nick + " :" + chunk);
+        pos += MAX_CONTENT_LEN;
+      }
+    }
+
+    // MOTD end
     send_raw("376 " + _nick + " :End of MOTD command.");
   }
 

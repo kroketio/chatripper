@@ -179,17 +179,7 @@ void Ctx::createDefaultFiles() {
     const QString &fp = it.key();
     const QString &destName = it.value();
 
-    // if (!QFile::exists(fp)) {
-    //   qWarning() << "Source file does not exist, skipping:" << fp;
-    //   continue;
-    // }
-
     QString to_path = QString("%1/qircd/%2").arg(dest_python, destName);
-
-    // if (QFile::exists(to_path)) {
-    //   qDebug() << "File already exists, skipping:" << to_path;
-    //   continue;
-    // }
 
     if (QFile::exists(to_path)) {
       QFile::remove(to_path);
@@ -201,6 +191,31 @@ void Ctx::createDefaultFiles() {
     }
 
     QFile::setPermissions(to_path, QFile::ExeUser | QFile::ReadUser | QFile::WriteUser);
+  }
+
+  // Regular
+  auto dest_default = g::configDirectory;
+  const QMap<QString, QString> files_default = {
+    {":/motd.txt",  "motd.txt"}
+  };
+
+  for (auto it = files_default.constBegin(); it != files_default.constEnd(); ++it) {
+    const QString &fp = it.key();
+    const QString &destName = it.value();
+
+    QString to_path = QString("%1/%2").arg(dest_default, destName);
+
+    // do not overwrite
+    if (QFile::exists(to_path)) {
+      continue;
+    }
+
+    if (!QFile::copy(fp, to_path)) {
+      qWarning() << "Failed to copy" << fp << "to" << to_path;
+      continue;
+    }
+
+    QFile::setPermissions(to_path, QFile::ReadUser | QFile::WriteUser);
   }
 }
 

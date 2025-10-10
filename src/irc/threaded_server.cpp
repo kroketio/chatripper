@@ -109,6 +109,45 @@ namespace irc {
     return QHostInfo::localHostName().toUtf8();
   }
 
+  QByteArray ThreadedServer::motd() {
+    reloadMotd();
+    return g::irc_motd;
+  }
+
+  void ThreadedServer::reloadMotd() {
+    g::irc_motd_path.refresh();
+    const QFileInfo &fileInfo = g::irc_motd_path;
+
+    if (!fileInfo.exists()) {
+      QWriteLocker wlock(&mtx_lock);
+      g::irc_motd = "Welcome!";
+      g::irc_motd_last_modified = 0;
+      return;
+    }
+
+    const time_t lastModified = fileInfo.lastModified().toSecsSinceEpoch();
+    if (lastModified == g::irc_motd_last_modified) {
+      // no change, keep cached
+      return;
+    }
+
+    QFile file(fileInfo.absoluteFilePath());
+    if (!file.open(QIODevice::ReadOnly)) {
+      QWriteLocker wlock(&mtx_lock);
+      qWarning() << "Failed to open MOTD file:" << fileInfo.absoluteFilePath();
+      g::irc_motd = "Welcome!";
+      g::irc_motd_last_modified = 0;
+      return;
+    }
+
+    const QByteArray motdData = file.readAll();
+    file.close();
+
+    QWriteLocker wlock(&mtx_lock);
+    g::irc_motd = motdData;
+    g::irc_motd_last_modified = lastModified;
+  }
+
   ThreadedServer::~ThreadedServer() {
     for (QThread* thread: m_thread_pool) {
       thread->quit();
@@ -116,5 +155,4 @@ namespace irc {
       delete thread;
     }
   }
-
 }

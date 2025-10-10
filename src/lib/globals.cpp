@@ -12,6 +12,10 @@ namespace g {
   QByteArray defaultHost;
   QFileInfo pathDatabase;
   QFileInfo pathDatabasePreload;
+  QByteArray irc_motd;
+  unsigned int irc_motd_size;
+  QFileInfo irc_motd_path;
+  time_t irc_motd_last_modified;
   WebSessionStore* webSessions = nullptr;
   QThread* mainThread = nullptr;
   Ctx* ctx = nullptr;

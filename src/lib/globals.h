@@ -16,6 +16,10 @@ namespace g {
   extern QString cacheDirectory;
   extern QString staticDirectory;
   extern QByteArray defaultHost;
+  extern QByteArray irc_motd;
+  extern QFileInfo irc_motd_path;
+  extern unsigned int irc_motd_size;
+  extern time_t irc_motd_last_modified;
   extern QFileInfo pathDatabase;
   extern QFileInfo pathDatabasePreload;
   extern WebSessionStore* webSessions;

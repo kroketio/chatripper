@@ -17,6 +17,7 @@ void Utils::init() {
   g::staticDirectory = g::configDirectory + "static/";
   g::cacheDirectory = QString("%1/cache").arg(g::configDirectory);
   g::pathDatabase = QFileInfo(g::configDirectory + "db.sqlite3");
+  g::irc_motd_path = QFileInfo(g::configDirectory + "motd.txt");
   g::pathDatabasePreload = QFileInfo(g::configDirectory + "preload.json");
 }
 

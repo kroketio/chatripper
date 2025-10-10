@@ -1,0 +1,2 @@
+Hi, welcome to cIRCa
+Change this MOTD if you like!
