@@ -6,6 +6,11 @@ from typing import List, Any
 from .models import *
 
 @dataclass
+class RawMessage(QEventBase, QClass):
+    raw: bytes
+    ip: str
+
+@dataclass
 class ChannelJoin(QEventBase, QClass):
     channel: Channel
     account: Account

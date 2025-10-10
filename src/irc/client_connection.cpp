@@ -999,7 +999,24 @@ namespace irc {
     m_socket->disconnectFromHost();
   }
 
-  void client_connection::parseIncoming(const QByteArray &line) {
+  void client_connection::parseIncoming(QByteArray &line) {
+    if (!line.isEmpty() && g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::RAW_MSG)) {
+      auto raw = QSharedPointer<QEventRawMessage>(new QEventRawMessage());
+      raw->raw = line;
+      raw->ip = m_remote.toString();
+
+      const auto result = g::ctx->snakepit->event(
+        QEnums::QIRCEvent::RAW_MSG,
+        raw);
+
+      if (result.canConvert<QSharedPointer<QEventRawMessage>>()) {
+        if (raw->cancelled())
+          return;
+
+        line = raw->raw;
+      }
+    }
+
     auto parts = split_irc(line);
     if (parts.isEmpty())
       return;

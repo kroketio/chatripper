@@ -10,11 +10,17 @@ To create a module, define a Python class that inherits from `QIRCModule`.
 Your class MUST implement `__init__` with a `super()`, then 
 register event callbacks using the `@qirc.on()` decorator.
 
-Your Python file goes into `data/modules/`
+Your Python module filename must start with `mod_`, and goes into `data/modules/`
 
-#### Example
+## Type completion
 
-Here is an example module: `data/modules/my_module.py`
+While working on your module, we strongly suggest to copy the folder `src/python/qircd/` 
+inside your development environment, so that you have type completion for the various 
+dataclasses, and events.
+
+### Example
+
+An example module `data/modules/mod_test.py`
 
 ```python3
 from qircd import *
@@ -42,23 +48,23 @@ Then reload the server, and enable the module.
 you can also implement the `init` and `deinit` methods if you want to do 
 something when the module is activated, or deactivated.
 
-## Concurrency
+# Events
 
-cIRCa runs `x` independent Python interpreters in a thread pool, each with its own Global Interpreter Lock (GIL), as described in [PEP 684](https://peps.python.org/pep-0684/).
+### Raw Message (incoming)
 
-Because each interpreter is isolated, your module is loaded separately 
-into every instance. cIRCa automatically selects which interpreter to use for each call (currently via round-robin).
+This runs early - before cIRCa has started parsing the IRC line.
 
-## Performance
+```python3
+@qirc.on(QIRCEvent.RAW_MSG)
+def raw_message_handler(self, msg: RawMessage) -> RawMessage:
+    print("raw", msg.raw)
+    print("ip", msg.ip)
+    return msg
+```
 
-The overhead of invoking a Python callback is low—typically around **250-500 microseconds** for a full C++ → Python → C++ round trip.
+### Authentication handler
 
-## Events
-
-#### Authentication handler
-
-You can implement custom authentication by providing your own SASL 
-handler, for example to validate against a database, LDAP, or any external system.
+Implement custom authentication by providing a SASL handler, for example to validate against a database, LDAP, or any external system.
 
 ```python3
 @qirc.on(QIRCEvent.AUTH_SASL_PLAIN)
@@ -71,7 +77,7 @@ def sasl_verify_password(self, auth: AuthUser) -> AuthUser:
     return auth
 ```
 
-#### Channel Join
+### Channel Join
 
 ```python3
 @qirc.on(QIRCEvent.CHANNEL_JOIN)
@@ -84,7 +90,7 @@ def join_handler(self, join: ChannelJoin) -> ChannelJoin:
     return join
 ```
 
-#### Channel Message
+### Channel Message
 
 ```python3
 @qirc.on(QIRCEvent.CHANNEL_MSG)
@@ -94,3 +100,14 @@ def allcaps_handler(self, msg: Message) -> Message:
         msg.text = msg.text.upper()
     return msg
 ```
+
+# Concurrency
+
+cIRCa runs `x` independent Python interpreters in a thread pool, each with its own Global Interpreter Lock (GIL), as described in [PEP 684](https://peps.python.org/pep-0684/).
+
+Because each interpreter is isolated, your module is loaded separately
+into every instance. cIRCa automatically selects which interpreter to use for each call (currently via round-robin).
+
+# Performance
+
+The overhead of invoking a Python callback is low—typically around **250-500 microseconds** for a full C++ → Python → C++ round trip.

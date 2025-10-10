@@ -102,7 +102,7 @@ namespace irc {
     mutable QMutex mtx_lock;
     QTimer* m_inactivityTimer = nullptr;
 
-    void parseIncoming(const QByteArray &line);
+    void parseIncoming(QByteArray &line);
     void handlePASS(const QList<QByteArray> &args);
     void handleNICK(const QList<QByteArray> &args);
     void handleUSER(const QList<QByteArray> &args);

@@ -26,6 +26,17 @@ public:
   [[nodiscard]] bool cancelled() const { return _cancel; }
 };
 
+class QEventRawMessage final : public QEventBase {
+  Q_GADGET
+  Q_PROPERTY(QByteArray raw MEMBER raw)
+  Q_PROPERTY(QString ip MEMBER ip)
+public:
+  QByteArray raw;
+  QString ip;
+
+  QEventRawMessage() = default;
+};
+
 class QEventChannelJoin final : public QEventBase {
   Q_GADGET
   Q_PROPERTY(QSharedPointer<QObject> channel READ getChannel WRITE setChannel)
@@ -136,7 +147,8 @@ public:
     CHANNEL_MSG     = 1 << 1,
     PRIVATE_MSG     = 1 << 2,
     CHANNEL_JOIN    = 1 << 3,
-    CHANNEL_LEAVE   = 1 << 4
+    CHANNEL_LEAVE   = 1 << 4,
+    RAW_MSG         = 1 << 5
   };
   Q_ENUM(QIRCEvent)
 };
@@ -154,3 +166,4 @@ Q_DECLARE_METATYPE(QSharedPointer<QEventBase>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventChannelJoin>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventMessage>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventAuthUser>)
+Q_DECLARE_METATYPE(QSharedPointer<QEventRawMessage>)

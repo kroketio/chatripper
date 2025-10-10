@@ -52,6 +52,7 @@ class QIRCEvent(IntFlag):
     PRIVATE_MSG         = 1 << 2
     CHANNEL_JOIN        = 1 << 3
     CHANNEL_LEAVE       = 1 << 4
+    RAW_MSG             = 1 << 5
 
 class QIRCModule:
     """

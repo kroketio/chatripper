@@ -1,7 +1,7 @@
 <RCC>
 <qresource prefix="/">
-  <file alias="qircd.py">python/files/qircd.py</file>
-  <file alias="models.py">python/files/models.py</file>
-  <file alias="events.py">python/files/events.py</file>
+  <file alias="qircd.py">python/qircd/qircd.py</file>
+  <file alias="models.py">python/qircd/models.py</file>
+  <file alias="events.py">python/qircd/events.py</file>
 </qresource>
 </RCC>
