@@ -101,6 +101,19 @@ def allcaps_handler(self, msg: Message) -> Message:
     return msg
 ```
 
+### Peer Max Connections
+
+Emitted when an IP has reached its maximum allowed connections to the IRC 
+server. Use this event in case you want to add this IP to some external firewall.
+
+```python3
+@qirc.on(QIRCEvent.PEER_MAX_CONNECTIONS)
+def max_conns_handler(self, ev: PeerMaxConnections) -> PeerMaxConnections:
+    print(ev.ip)
+    print("has connections:", ev.connections)
+    return ev
+```
+
 # Concurrency
 
 cIRCa runs `x` independent Python interpreters in a thread pool, each with its own Global Interpreter Lock (GIL), as described in [PEP 684](https://peps.python.org/pep-0684/).

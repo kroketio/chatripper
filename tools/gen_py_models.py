@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 
 path = Path(__file__).parent / "../src/core/qtypes.h"
-out_path = Path(__file__).parent / "../src/python/files/events.py"
+out_path = Path(__file__).parent / "../src/python/qircd/events.py"
 
 # extended Qt -> Python base types
 BASE_TYPE_MAP = {

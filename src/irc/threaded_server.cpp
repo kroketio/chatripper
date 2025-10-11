@@ -15,6 +15,7 @@
 #endif
 
 #include "threaded_server.h"
+#include "ctx.h"
 
 #include "client_connection.h"
 
@@ -89,6 +90,17 @@ namespace irc {
 #ifndef QT_NO_DEBUG_OUTPUT
         qDebug() << "rejected connection (max IPs) from" << remote_ip;
 #endif
+
+        if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::PEER_MAX_CONNECTIONS)) {
+          auto ev = QSharedPointer<QEventPeerMaxConnections>(new QEventPeerMaxConnections());
+          ev->connections = m_max_per_ip;
+          ev->ip = remote_ip.toString();
+
+          const auto result = g::ctx->snakepit->event(
+            QEnums::QIRCEvent::RAW_MSG,
+            ev);
+        }
+
         return;
       }
       activeConnections[remote_ip]++;

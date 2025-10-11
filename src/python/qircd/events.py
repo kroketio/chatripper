@@ -6,6 +6,11 @@ from typing import List, Any
 from .models import *
 
 @dataclass
+class PeerMaxConnections(QEventBase, QClass):
+    connections: int
+    ip: str
+
+@dataclass
 class RawMessage(QEventBase, QClass):
     raw: bytes
     ip: str

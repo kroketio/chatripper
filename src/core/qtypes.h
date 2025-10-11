@@ -26,6 +26,17 @@ public:
   [[nodiscard]] bool cancelled() const { return _cancel; }
 };
 
+class QEventPeerMaxConnections final : public QEventBase {
+  Q_GADGET
+  Q_PROPERTY(int connections MEMBER connections)
+  Q_PROPERTY(QString ip MEMBER ip)
+public:
+  int connections;
+  QString ip;
+
+  QEventPeerMaxConnections() = default;
+};
+
 class QEventRawMessage final : public QEventBase {
   Q_GADGET
   Q_PROPERTY(QByteArray raw MEMBER raw)
@@ -143,12 +154,13 @@ public:
   Q_ENUM(QModuleMode)
 
   enum class QIRCEvent : int {
-    AUTH_SASL_PLAIN = 1 << 0,
-    CHANNEL_MSG     = 1 << 1,
-    PRIVATE_MSG     = 1 << 2,
-    CHANNEL_JOIN    = 1 << 3,
-    CHANNEL_LEAVE   = 1 << 4,
-    RAW_MSG         = 1 << 5
+    AUTH_SASL_PLAIN       = 1 << 0,
+    CHANNEL_MSG           = 1 << 1,
+    PRIVATE_MSG           = 1 << 2,
+    CHANNEL_JOIN          = 1 << 3,
+    CHANNEL_LEAVE         = 1 << 4,
+    RAW_MSG               = 1 << 5,
+    PEER_MAX_CONNECTIONS  = 1 << 6
   };
   Q_ENUM(QIRCEvent)
 };
@@ -167,3 +179,4 @@ Q_DECLARE_METATYPE(QSharedPointer<QEventChannelJoin>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventMessage>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventAuthUser>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventRawMessage>)
+Q_DECLARE_METATYPE(QSharedPointer<QEventPeerMaxConnections>)

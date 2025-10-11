@@ -47,12 +47,13 @@ class QIRCModuleMode(Enum):
     EXCLUSIVE =       1 << 1
 
 class QIRCEvent(IntFlag):
-    AUTH_SASL_PLAIN     = 1 << 0
-    CHANNEL_MSG         = 1 << 1
-    PRIVATE_MSG         = 1 << 2
-    CHANNEL_JOIN        = 1 << 3
-    CHANNEL_LEAVE       = 1 << 4
-    RAW_MSG             = 1 << 5
+    AUTH_SASL_PLAIN       = 1 << 0
+    CHANNEL_MSG           = 1 << 1
+    PRIVATE_MSG           = 1 << 2
+    CHANNEL_JOIN          = 1 << 3
+    CHANNEL_LEAVE         = 1 << 4
+    RAW_MSG               = 1 << 5
+    PEER_MAX_CONNECTIONS  = 1 << 6
 
 class QIRCModule:
     """

@@ -37,6 +37,11 @@ void PyTypeRegistry::registerAll() {
       [](const QEventBase* ev) -> const QEventBase* {
           return dynamic_cast<const QEventRawMessage*>(ev);
       });
+
+  registerType("PeerMaxConnections", &QEventPeerMaxConnections::staticMetaObject,
+      [](const QEventBase* ev) -> const QEventBase* {
+          return dynamic_cast<const QEventPeerMaxConnections*>(ev);
+      });
 }
 
 const RegisteredType *PyTypeRegistry::findByPyName(const QString &pyName) {
