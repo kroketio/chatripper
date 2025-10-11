@@ -16,7 +16,7 @@ cIRCa is an IRC server, but unlike others. Read [more](docs/design.md).
 * Built-in bouncer
 * No config, configuration happens through the admin webif
 * Server-side scripting with Python
-* Web chat client
+* Built-in webserver, with a web chat client
 * REST API
 * Generate invite links
 
