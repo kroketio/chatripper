@@ -9,6 +9,7 @@
 #include "core/channel.h"
 #include "core/account.h"
 #include "lib/globals.h"
+#include "irc/utils.h"
 
 namespace irc {
   constexpr static qint64 CHUNK_SIZE = 1024;
@@ -423,17 +424,14 @@ namespace irc {
       const QByteArray& target,
       const QSharedPointer<QEventMessage> &message
   ) const {
-    QByteArray tag_prefix;
+    const QByteArray tag_prefix = buildTagPrefix(message, src, capabilities);
 
-    if (capabilities.has(PROTOCOL_CAPABILITY::ACCOUNT_TAG)) {
-      if (!src.isNull()) {
-        const QByteArray src_username = src->name();
-        if (!src_username.isEmpty())
-          tag_prefix = "@account=" + src_username + " ";
-      }
-    }
+    const QByteArray msg =
+        tag_prefix +
+        ":" + src->prefix(0) +
+        " PRIVMSG " + target +
+        " :" + message->text + "\r\n";
 
-    const QByteArray msg = tag_prefix + ":" + src->prefix(0) + " PRIVMSG " + target + " :" + message->text + "\r\n";
     emit sendData(msg);
   }
 
