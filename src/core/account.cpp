@@ -206,12 +206,24 @@ bool Account::setNick(const QByteArray &nick) {
 
 void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, QSharedPointer<QEventMessage> &message) {
   // @TODO: deal with history when we are offline
-  QReadLocker locker(&mtx_lock);
+
+  if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::PRIVATE_MSG)) {
+    const auto result = g::ctx->snakepit->event(
+      QEnums::QIRCEvent::PRIVATE_MSG,
+      message);
+
+    if (result.canConvert<QSharedPointer<QEventMessage>>()) {
+      const auto resPtr = result.value<QSharedPointer<QEventMessage>>();
+      if (resPtr->cancelled())
+        return;
+    }
+  }
 
   const auto self = get_by_uid(m_uid);
   if (self.isNull())
     return;
 
+  QReadLocker locker(&mtx_lock);
   for (const auto& _conn: dest->connections)
     _conn->message(self, m_nick, message);
 

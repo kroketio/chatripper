@@ -108,6 +108,7 @@ class QEventMessage final : public QEventBase {
   Q_PROPERTY(QStringList targets MEMBER targets)
   Q_PROPERTY(QByteArray raw MEMBER raw)
   Q_PROPERTY(QSharedPointer<QObject> account READ getAccount WRITE setAccount)
+  Q_PROPERTY(QSharedPointer<QObject> dest READ getDest WRITE setDest)
   Q_PROPERTY(QSharedPointer<QObject> channel READ getChannel WRITE setChannel)
   Q_PROPERTY(bool from_system MEMBER from_system)
 public:
@@ -129,6 +130,8 @@ public:
 
   // t:Account d:None
   QSharedPointer<Account> account;
+  // t:Account d:None
+  QSharedPointer<Account> dest;
   // t:Channel d:None
   QSharedPointer<Channel> channel;
 
@@ -142,6 +145,9 @@ public:
 
   QSharedPointer<QObject> getAccount() const;
   void setAccount(const QSharedPointer<QObject>& a);
+
+  QSharedPointer<QObject> getDest() const;
+  void setDest(const QSharedPointer<QObject>& a);
 };
 
 class QEventAuthUser final : public QEventBase {

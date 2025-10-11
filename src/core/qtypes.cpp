@@ -58,3 +58,11 @@ QSharedPointer<QObject> QEventMessage::getAccount() const {
 void QEventMessage::setAccount(const QSharedPointer<QObject>& a) {
   account = qSharedPointerCast<Account>(a);
 }
+
+QSharedPointer<QObject> QEventMessage::getDest() const {
+  return qSharedPointerCast<QObject>(dest);
+}
+
+void QEventMessage::setDest(const QSharedPointer<QObject>& a) {
+  dest = qSharedPointerCast<Account>(a);
+}

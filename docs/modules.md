@@ -104,6 +104,18 @@ def channel_leave_handler(self, part: ChannelPart) -> ChannelPart:
     return part
 ```
 
+### Private Message
+
+Incoming private message.
+
+```python3
+@qirc.on(QIRCEvent.PRIVATE_MSG)
+def private_message_handler(self, msg: Message) -> Message:
+    print("from", msg.account)
+    print("to", msg.dest)
+    return msg
+```
+
 ### Channel Message
 
 Incoming channel message.

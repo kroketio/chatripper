@@ -40,6 +40,7 @@ class Message(QEventBase, QClass):
     tags: Dict[str,Any] = field(default_factory=dict)
     targets: List[str] = field(default_factory=list)
     account: Account = None
+    dest: Account = None
     channel: Channel = None
     from_system: bool = False
 

@@ -630,11 +630,13 @@ namespace irc {
       msg->channel = chan_ptr;
       chan_ptr->message(this, m_account, msg);
     } else {
-      if (!g::ctx->irc_nicks.contains(target)) {
+      const auto dest = g::ctx->irc_nick_get(target);
+      if (dest.isNull()) {
         send_raw("401 " + _nick + " " + target + " :No such nick/channel");
         return;
       }
 
+      msg->dest = dest;
       m_account->message(this, g::ctx->irc_nicks[target], msg);
     }
   }
