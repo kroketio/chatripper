@@ -109,7 +109,8 @@ void Snake::start() {
 
   // set eventClasses dataclasses
   for (const auto&t: PyTypeRegistry::all()) {
-    const auto name = t.pyName.toStdString().c_str();
+    const auto name_str = t.pyName.toStdString();
+    const auto name = name_str.c_str();
 
     PyObject *cls = PyObject_GetAttrString(eventsModule, name);
     if (!cls || !PyCallable_Check(cls)) {

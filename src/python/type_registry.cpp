@@ -42,6 +42,11 @@ void PyTypeRegistry::registerAll() {
       [](const QEventBase* ev) -> const QEventBase* {
           return dynamic_cast<const QEventPeerMaxConnections*>(ev);
       });
+
+  registerType("ChannelPart", &QEventChannelPart::staticMetaObject,
+      [](const QEventBase* ev) -> const QEventBase* {
+          return dynamic_cast<const QEventChannelPart*>(ev);
+      });
 }
 
 const RegisteredType *PyTypeRegistry::findByPyName(const QString &pyName) {

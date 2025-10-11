@@ -42,8 +42,7 @@ public:
   [[nodiscard]] bool has(const QByteArray &account_name) const;
   // void join(const QByteArray &account_name);
   void join(const QSharedPointer<QEventChannelJoin> &event);
-  void part(QSharedPointer<Account> &account, const QByteArray &message = "");
-  void leave(const QByteArray &account_name);
+  bool part(const QSharedPointer<QEventChannelPart> &event);
 
   void setServer(const QSharedPointer<Server> &server);
   QSharedPointer<Server> server() const;

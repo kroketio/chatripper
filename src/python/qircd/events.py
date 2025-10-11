@@ -23,6 +23,13 @@ class ChannelJoin(QEventBase, QClass):
     from_system: bool = False
 
 @dataclass
+class ChannelPart(QEventBase, QClass):
+    channel: Channel
+    account: Account
+    message: str = ""
+    from_system: bool = False
+
+@dataclass
 class Message(QEventBase, QClass):
     id: bytes
     nick: str

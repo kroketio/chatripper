@@ -87,8 +87,7 @@ namespace irc {
     void reply_num(int code, const QByteArray &text);
     void reply_self(const QByteArray &command, const QByteArray &args);
 
-    void channel_part(const QSharedPointer<Account> &account, const QSharedPointer<Channel> &channel, const QByteArray &message = "");
-    void channel_part(const QByteArray &channel_name, const QByteArray &message = "");
+    void channel_part(const QSharedPointer<QEventChannelPart> &event);
 
     bool change_nick(const QByteArray &new_nick);
     bool change_nick(const QSharedPointer<Account> &acc, const QByteArray &old_nick, const QByteArray &new_nick);

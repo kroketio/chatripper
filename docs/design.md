@@ -17,15 +17,9 @@ Some options suffer from one, or a combination of the following issues:
 - Poor on-boarding, and overall UX
 - Time-consuming to install, and configure
 - Heavy/bloated protocol
-- Poor choice of server technology 
-
-For example, while we *do* like Prosody (XMPP), this ecosystem 
-still suffers from an arcane setup procedure, and hard-to-use client 
-software for your average regular internet user.
+- Poor choice of server technology
 
 ## Goals
-
-Our goals for a self-hosted chat platform are:
 
 - Multiple connections to a single account
 - 'Always online' (bouncer-like functionality)
@@ -43,19 +37,18 @@ Our goals for a self-hosted chat platform are:
 - Avatars, display names, metadata
 - Invite links
 - Simple protocol
-- Built-in web chat client
+- Built-in webserver, with a web chat client
 
 ## Why we choose IRC
 
-Because it is simple, we can quickly debug things using standard network capture
+Because it is simple, we can quickly debug things using network capture
 tools (shoutout to `ngrep -dlo -qt -W byline port 6667`), and the protocol 
 is well understood. Other protocols are more complicated, therefor requiring 
 more implementation effort. 
 
 The issue however; IRC (and [IRCv3](https://ircv3.net/)) are *not really* suited for the goals 
 outlined above. While IRCv3 is a move in the right direction, the protocol would 
-not meet user expectations, as explained by long time IRC developer ariadne in
-a [Mastodon thread](https://web.archive.org/web/20230418155309mp_/https://social.treehouse.systems/@ariadne/110199104168870444).
+not meet user expectations (see [Mastodon thread](https://web.archive.org/web/20230418155309mp_/https://social.treehouse.systems/@ariadne/110199104168870444)).
 
 If we picked Matrix, or XMPP, and tried to make a server, it 
 would take a great amount of time. We already know we want to implement 
@@ -63,18 +56,19 @@ custom features, and that would require a (deep) understanding of the protocol i
 question, which can be quite a bit to absorb. We also need to create a custom 
 client to test all these custom server features, again costing time.
 
-We believe IRC's simplicity negates the fact that this protocol was not designed for 
-our goals. We can simply add protocol features (specifications) as we go, 
+IRC's simplicity negates the fact that this protocol was not designed for 
+our goals. We'll simply add protocol features (specifications) as we go, 
 in a timely manner.
 
 ## Our strategy
 
 We have adopted the following strategy:
 
-1. Don't care too much about being IRC spec compliant - but be compliant enough for existing clients to reasonably work
-2. When a specification is silly, we don't implement it, or introduce a new version for it
-3. When a feature cannot be implemented using an existing specification, we introduce a new specification.
-4. Make our own chat client, eventually
+1. Do not be 100% IRC spec compliant - but compliant enough for existing clients to work
+2. Do not implement all specifications, only if it helps reach our goals
+3. When a feature cannot be implemented using an existing specification, we introduce a new specification
+4. Try to encapsulate everything over the IRC connection - only go out-of-band when all options are exhausted 
+5. Make our own chat client, eventually
 
 ## Target audience
 

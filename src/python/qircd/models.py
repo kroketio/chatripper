@@ -77,6 +77,13 @@ class Account(QClass):
 
     connections_count: int = 0
 
+    def name_or_nick(self) -> str:
+        """Helper function.
+        Not every account has a name; only if it is a
+        registered account. Anonymous IRC users have
+        a nick"""
+        return self.name if self.name else self.nick
+
     def prefix(self) -> str:
         """nick!username@host."""
         user = self.name or ""

@@ -55,32 +55,46 @@ void Channel::setServer(const QSharedPointer<Server> &server) {
   m_server = server;
 }
 
-void Channel::part(QSharedPointer<Account> &account, const QByteArray &message) {
-  QWriteLocker locker(&mtx_lock);
-  const auto chan_ptr = get(m_name);
-  if (!m_members.contains(account))
-    return;
+bool Channel::part(const QSharedPointer<QEventChannelPart> &event) {
+  if (!event->from_system && g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::CHANNEL_PART)) {
+    const auto result = g::ctx->snakepit->event(QEnums::QIRCEvent::CHANNEL_PART, event);
 
-  // part the various connections
-  for (const auto& conn: account->connections) {
-    if (conn->channels.contains(m_name))
-      conn->channel_part(m_name, message);
-  }
-
-  // notify channel participants
-  for (const auto& member: m_members) {
-    if (member->uid() == account->uid()) continue;
-
-    for (const auto& conn: member->connections) {
-      if (conn->channel_members[chan_ptr].contains(account)) {
-        conn->channel_part(account, chan_ptr, message);
-      }
+    if (result.canConvert<QSharedPointer<QEventChannelPart>>()) {
+      auto resPtr = result.value<QSharedPointer<QEventChannelPart>>();
+      if (resPtr->cancelled())
+        return false;
     }
   }
+
+  const auto chan_ptr = get(m_name);
+
+  QReadLocker rlock(&mtx_lock);
+  if (!m_members.contains(event->account))
+    return false;
+  rlock.unlock();
+
+  // broadcast
+  rlock.relock();
+  for (const auto& member: m_members) {
+    for (const auto& conn: member->connections) {
+      qDebug() << "emit part to" << member->name();
+
+      QMetaObject::invokeMethod(conn,
+        [conn, event] {
+          conn->channel_part(event);
+        }, Qt::QueuedConnection);
+    }
+  }
+  rlock.unlock();
+
+  QWriteLocker wlock(&mtx_lock);
+  m_members.removeAll(event->account);
+  wlock.unlock();
+
+  return true;
 }
 
 // @TODO: check if user is allowed to join/create new channel
-// auto join = QSharedPointer<QEventChannelJoin>(new QEventChannelJoin);
 void Channel::join(const QSharedPointer<QEventChannelJoin> &event) {
   const auto chan_ptr = get(m_name);
 

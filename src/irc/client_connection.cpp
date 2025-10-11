@@ -508,28 +508,35 @@ namespace irc {
     send_raw("366 " + _nick + " " + "#" + channel->name() + " :End of NAMES list");
   }
 
-  void client_connection::channel_part(const QSharedPointer<Account> &account, const QSharedPointer<Channel> &channel, const QByteArray &message) {
-    const auto acc_prefix = account->prefix(0);
+  void client_connection::channel_part(const QSharedPointer<QEventChannelPart> &event) {
+    const auto channel_name = event->channel->name();
 
-    const QByteArray reason = message.isEmpty() ? "" : " :" + message;
-    const QByteArray msg = ":" + acc_prefix + " PART #" + channel->name() + reason + "\r\n";
-    emit sendData(msg);
+    if (event->account->uid() == m_account->uid()) {
+      // PART self
+      QWriteLocker locker(&mtx_lock);
+      channel_members.remove(event->channel);
+      channels.remove(channel_name);
+      locker.unlock();
+      reply_self("PART", ":#" + channel_name);
+    } else {
+      // notify channel participants
+      QReadLocker rlock(&mtx_lock);
+      if (!channel_members.contains(event->channel))
+        return;
 
-    QWriteLocker locker(&mtx_lock);
-    if (channel_members.contains(channel))
-      channel_members.remove(channel);
-  }
+      if (!channel_members[event->channel].contains(event->account))
+        return;
+      rlock.unlock();
 
-  void client_connection::channel_part(const QByteArray &channel_name, const QByteArray &message) {
-    // local bookkeeping
-    const auto ptr = Channel::get(channel_name);
+      const auto acc_prefix = event->account->prefix(0);
+      const QByteArray reason = event->message.isEmpty() ? "" : " :" + event->message;
+      const QByteArray msg = ":" + acc_prefix + " PART #" + channel_name + reason + "\r\n";
+      emit sendData(msg);
 
-    QWriteLocker locker(&mtx_lock);
-    channel_members.remove(ptr);
-    channels.remove(channel_name);
-    locker.unlock();
-
-    reply_self("PART", ":#" + channel_name);
+      QWriteLocker locker(&mtx_lock);
+      if (channel_members.contains(event->channel))
+        channel_members.remove(event->channel);
+    }
   }
 
   void client_connection::handleJOIN(const QList<QByteArray> &args) {
@@ -579,10 +586,18 @@ namespace irc {
 
       auto channel_name = _name.mid(1);
       auto chan_ptr = Channel::get(channel_name);
-      if (!chan_ptr.isNull())
-        chan_ptr->part(m_account, message);
-      else
-        send_raw("442 " + _nick + " " + channel_name + " :You're not on that channel");
+      if (!chan_ptr.isNull()) {
+        const auto event = QSharedPointer<QEventChannelPart>(new QEventChannelPart);
+        event->from_system = false;
+        event->channel = chan_ptr;
+        event->account = m_account;
+        event->message = message;
+        if (chan_ptr->part(event))
+          return;
+
+      }
+
+      send_raw("442 " + _nick + " " + channel_name + " :You're not on that channel");
     }
   }
 

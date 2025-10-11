@@ -72,6 +72,31 @@ public:
   void setAccount(const QSharedPointer<QObject>& a);
 };
 
+class QEventChannelPart final : public QEventBase {
+  Q_GADGET
+  Q_PROPERTY(QSharedPointer<QObject> channel READ getChannel WRITE setChannel)
+  Q_PROPERTY(QSharedPointer<QObject> account READ getAccount WRITE setAccount)
+  Q_PROPERTY(QByteArray message MEMBER message)
+  Q_PROPERTY(bool from_system MEMBER from_system)
+public:
+  QSharedPointer<Channel> channel;
+  QSharedPointer<Account> account;
+
+  // t:str d:""
+  QByteArray message = "";
+
+  // t:bool d:False
+  bool from_system = false;
+
+  QEventChannelPart() = default;
+
+  QSharedPointer<QObject> getChannel() const;
+  void setChannel(const QSharedPointer<QObject>& c);
+
+  QSharedPointer<QObject> getAccount() const;
+  void setAccount(const QSharedPointer<QObject>& a);
+};
+
 class QEventMessage final : public QEventBase {
   Q_GADGET
   Q_PROPERTY(QByteArray id MEMBER id)
@@ -158,7 +183,7 @@ public:
     CHANNEL_MSG           = 1 << 1,
     PRIVATE_MSG           = 1 << 2,
     CHANNEL_JOIN          = 1 << 3,
-    CHANNEL_LEAVE         = 1 << 4,
+    CHANNEL_PART          = 1 << 4,
     RAW_MSG               = 1 << 5,
     PEER_MAX_CONNECTIONS  = 1 << 6
   };
@@ -180,3 +205,4 @@ Q_DECLARE_METATYPE(QSharedPointer<QEventMessage>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventAuthUser>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventRawMessage>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventPeerMaxConnections>)
+Q_DECLARE_METATYPE(QSharedPointer<QEventChannelPart>)

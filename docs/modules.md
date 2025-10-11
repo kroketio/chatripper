@@ -10,11 +10,11 @@ To create a module, define a Python class that inherits from `QIRCModule`.
 Your class MUST implement `__init__` with a `super()`, then 
 register event callbacks using the `@qirc.on()` decorator.
 
-Your Python module filename must start with `mod_`, and goes into `data/modules/`
+Your Python module filename MUST start with `mod_`, and goes into `data/modules/`
 
 ## Type completion
 
-While working on your module, we strongly suggest to copy the folder `src/python/qircd/` 
+While working on your module, we suggest to copy the folder `src/python/qircd/` 
 inside your development environment, so that you have type completion for the various 
 dataclasses, and events.
 
@@ -79,6 +79,8 @@ def sasl_verify_password(self, auth: AuthUser) -> AuthUser:
 
 ### Channel Join
 
+User is about to join a channel.
+
 ```python3
 @qirc.on(QIRCEvent.CHANNEL_JOIN)
 def join_handler(self, join: ChannelJoin) -> ChannelJoin:
@@ -90,7 +92,21 @@ def join_handler(self, join: ChannelJoin) -> ChannelJoin:
     return join
 ```
 
+### Channel Part
+
+User is about to leave a channel.
+
+```python3
+@qirc.on(QIRCEvent.CHANNEL_PART)
+def channel_leave_handler(self, part: ChannelPart) -> ChannelPart:
+    print("channel part", part.account.name_or_nick())
+    part.message = "Face the wrath of a thousand suns."
+    return part
+```
+
 ### Channel Message
+
+Incoming channel message.
 
 ```python3
 @qirc.on(QIRCEvent.CHANNEL_MSG)
@@ -110,7 +126,7 @@ server. Use this event in case you want to add this IP to some external firewall
 @qirc.on(QIRCEvent.PEER_MAX_CONNECTIONS)
 def max_conns_handler(self, ev: PeerMaxConnections) -> PeerMaxConnections:
     print(ev.ip)
-    print("has connections:", ev.connections)
+    print("number of connections:", ev.connections)
     return ev
 ```
 
@@ -124,3 +140,16 @@ into every instance. cIRCa automatically selects which interpreter to use for ea
 # Performance
 
 The overhead of invoking a Python callback is low—typically around **250-500 microseconds** for a full C++ → Python → C++ round trip.
+
+# How it works
+
+On the C++ side, Qt classes (and also those annotated with `Q_GADGET` as to avoid 
+having to construct a full `Q_OBJECT`) are converted to Python dataclasses, at runtime, using 
+introspection, and vice versa.
+
+On the Python side, we track for dataclass member mutations, and mark them as dirty if 
+modified by the user, as to not update unnecessarily when we modify the C++ object after 
+leaving Python.
+
+It (probably) works similar to [thp/pyotherside](https://github.com/thp/pyotherside) except that we 
+have a focus on Python's dataclasses.

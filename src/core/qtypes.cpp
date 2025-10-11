@@ -25,6 +25,23 @@ void QEventChannelJoin::setAccount(const QSharedPointer<QObject>& a) {
   account = qSharedPointerCast<Account>(a);
 }
 
+// QEventChannelPart
+QSharedPointer<QObject> QEventChannelPart::getChannel() const {
+  return qSharedPointerCast<QObject>(channel);
+}
+
+void QEventChannelPart::setChannel(const QSharedPointer<QObject>& c) {
+  channel = qSharedPointerCast<Channel>(c);
+}
+
+QSharedPointer<QObject> QEventChannelPart::getAccount() const {
+  return qSharedPointerCast<QObject>(account);
+}
+
+void QEventChannelPart::setAccount(const QSharedPointer<QObject>& a) {
+  account = qSharedPointerCast<Account>(a);
+}
+
 // QEventMessage
 QSharedPointer<QObject> QEventMessage::getChannel() const {
   return qSharedPointerCast<QObject>(channel);

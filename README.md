@@ -20,13 +20,6 @@ cIRCa is an IRC server, but unlike others. Read [more](docs/design.md).
 * REST API
 * Generate invite links
 
-## Performance
-
-cIRCa is designed to operate primarily in memory. It is both multithreaded and 
-asynchronous. It can handle thousands of concurrent connections. I/O operations are 
-queued whenever possible, and concurrency is prioritized to deliver a fast, responsive chat 
-experience - low-powered hardware included.
-
 ## Server-side scripting
 
 Change messages in transit, modify/add IRCv3 message tags, and more.
@@ -54,8 +47,6 @@ my_mod = MyModule()
 qirc.register_module(my_mod)
 ```
 
-`Channel` and `Account` objects are available for any additional logic.
-
 More info [docs/modules.md](docs/modules.md)
 
 ## Quick start guide
@@ -72,6 +63,13 @@ For more information about Docker: [docs/docker.md](docs/docker.md)
 ### Compiling
 
 [docs/building.md](docs/building.md).
+
+## Performance
+
+cIRCa is designed to operate primarily in memory. It is both multithreaded and
+asynchronous. It can handle thousands of concurrent connections. I/O operations are
+queued whenever possible, and concurrency is prioritized to deliver a fast, responsive chat
+experience - low-powered hardware included.
 
 ## Testimonials
 
