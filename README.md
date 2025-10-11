@@ -89,3 +89,5 @@ For more information about Docker: [docs/docker.md](docs/docker.md)
 > &lt;user5&gt; what if I want to run this on ARM?
 
 > &lt;user6&gt; to be honest I'm not sure if individual message signatures are of much use really
+
+> &lt;user7&gt; why not using IPFS like made already
