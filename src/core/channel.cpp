@@ -164,6 +164,7 @@ QSharedPointer<Channel> Channel::get_or_create(const QByteArray &channel_name) {
   if (const auto it = channels.find(channel_name); it != channels.end())
     return it.value();
 
+  // @TODO: check if we are allowed to do this according to permissions
   const auto channel = new Channel(channel_name);
 
   if (g::mainThread != QThread::currentThread())
@@ -185,32 +186,11 @@ void Channel::setAccountOwner(const QSharedPointer<Account> &owner) {
   m_owner = owner;
 }
 
-void Channel::onNickChanged(const QSharedPointer<Account> &acc, const QByteArray& old_nick, const QByteArray& new_nick, QSet<QSharedPointer<Account>> &broadcasted_accounts) {
-  QWriteLocker locker(&mtx_lock);
-  for (const auto&_acc: m_members) {
-    if (_acc == acc)
-      continue;
-
-    if (broadcasted_accounts.contains(_acc)) {
-      continue;
-    }
-
-    for (const auto& conn: _acc->connections) {
-      broadcasted_accounts << _acc;
-      conn->change_nick(acc, old_nick, new_nick);
-    }
-  }
-}
-
 void Channel::addMembers(QList<QSharedPointer<Account>> accounts) {
   QWriteLocker locker(&mtx_lock);
   for (const auto& acc: accounts) {
     m_members.append(acc);
     acc->channels[m_name] = g::ctx->channels[m_name];
-
-    // connect(acc.data(), &Account::nickChanged, [acc, this](const QByteArray &old_nick, const QByteArray &new_nick) {
-    //   // this->onNickChanged(acc, old_nick, new_nick);
-    // });
   }
 }
 

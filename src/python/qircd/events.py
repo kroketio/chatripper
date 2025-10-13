@@ -11,6 +11,13 @@ class PeerMaxConnections(QEventBase, QClass):
     ip: str
 
 @dataclass
+class NickChange(QEventBase, QClass):
+    old_nick: str
+    new_nick: str
+    account: Account
+    from_server: bool = False
+
+@dataclass
 class RawMessage(QEventBase, QClass):
     raw: bytes
     ip: str

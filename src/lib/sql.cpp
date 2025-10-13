@@ -61,6 +61,7 @@ QSqlQuery &SQL::exec(QSqlQuery &q) {
 // ----------------------
 // SCHEMA CREATION
 // ----------------------
+// @TODO: add `nick`
 void SQL::create_schema() {
   exec(R"(
     CREATE TABLE IF NOT EXISTS accounts (

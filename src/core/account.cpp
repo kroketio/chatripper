@@ -9,8 +9,9 @@
 #include "channel.h"
 #include "ctx.h"
 
-Account::Account(const QByteArray& account_name, QObject* parent) : m_name(account_name) ,QObject(parent) {
+Account::Account(const QByteArray& account_name, QObject* parent) : m_nick(account_name), m_name(account_name) ,QObject(parent) {
   qDebug() << "new account" << account_name;
+  m_host = g::defaultHost;
 }
 
 void Account::setRandomUID() {
@@ -75,6 +76,7 @@ QSharedPointer<Account> Account::create_from_db(const QByteArray &id, const QByt
   account->creation_date = creation;
 
   g::ctx->account_insert_cache(account);
+  g::ctx->irc_nicks_insert_cache(account->nick(), account);
 
   return account;
 }
@@ -119,51 +121,52 @@ QByteArray Account::nick() {
   QReadLocker locker(&mtx_lock);
   if (!m_nick.isEmpty())
     return m_nick;
-
-  for (const auto& conn: connections) {
-    return conn->nick();
-  }
-
-  return {};
+  return "*";
 }
 
-bool Account::setNick(const QByteArray &nick) {
-  if (nick.isEmpty())
+// @TODO: throttle nick changes
+bool Account::setNick(const QSharedPointer<QEventNickChange> &event, bool broadcast) {
+  if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::NICK_CHANGE)) {
+    const auto result = g::ctx->snakepit->event(
+      QEnums::QIRCEvent::NICK_CHANGE,
+      event);
+
+    if (result.canConvert<QSharedPointer<QEventNickChange>>()) {
+      const auto resPtr = result.value<QSharedPointer<QEventNickChange>>();
+      if (resPtr->cancelled())
+        return false;
+    }
+  }
+
+  if (event->new_nick.isEmpty())
     return false;
 
   const auto self = get_by_uid(m_uid);
   if (self.isNull())
     return false;
 
-  QByteArray nick_lower;
-  QByteArray nick_old;
-  QByteArray nick_old_lower;
-
-  {
-    QReadLocker rlock(&mtx_lock);
-    nick_lower = nick.toLower();
-    nick_old = m_nick;
-    nick_old_lower = m_nick.toLower();
-  }
-
+  const QByteArray nick_lower = event->new_nick.toLower();
   const auto irc_nick_ptr = g::ctx->irc_nick_get(nick_lower);
+
   QWriteLocker mtx_irc_nick_rlock(&g::ctx->mtx_cache);
+  // nick already taken
   if (!irc_nick_ptr.isNull() && g::ctx->irc_nicks.value(nick_lower) != self)
     // @TODO: better return errors
     return false;
   mtx_irc_nick_rlock.unlock();
 
   QWriteLocker mtx_irc_nick(&g::ctx->mtx_cache);
-  g::ctx->irc_nicks.remove(nick_old);
+  g::ctx->irc_nicks.remove(event->old_nick);
   g::ctx->irc_nicks[nick_lower] = self;
   mtx_irc_nick.unlock();
 
   QWriteLocker wlock(&mtx_lock);
-  m_nick = nick;
+  m_nick = event->new_nick;
   wlock.unlock();
 
   // gather accounts that need to be notified
   QSet<QSharedPointer<Account>> l;
+  l << self;
 
   {
     QReadLocker rlock(&mtx_lock);
@@ -181,23 +184,14 @@ bool Account::setNick(const QByteArray &nick) {
       }
     }
 
-    // send nick change notify to the relevant, other accounts
+    // broadcast
     for (const auto& acc: l) {
-      if (acc != self) {
-        for (const auto&conn : acc->connections) {
-          QMetaObject::invokeMethod(conn,
-            [conn, self, nick_old, nick] {
-              conn->change_nick(self, nick_old, nick);
-            }, Qt::QueuedConnection);
-        }
+      for (const auto&conn : acc->connections) {
+        QMetaObject::invokeMethod(conn,
+          [conn, event] {
+            conn->change_nick(event);
+          }, Qt::QueuedConnection);
       }
-    }
-
-    for (const auto& conn: connections) {
-      QMetaObject::invokeMethod(conn,
-        [=] {
-          conn->change_nick(m_nick);
-        }, Qt::QueuedConnection);
     }
   }
 

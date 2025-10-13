@@ -85,10 +85,6 @@ Ctx::Ctx() {
 
   // Python
   snakepit = new SnakePit(this);
-  connect(snakepit, &SnakePit::allSnakesStarted, [this] {
-    snakepit->enableModule("TestModule");
-    snakepit->enableModule("AuthModule");
-  });
 }
 
 bool Ctx::account_username_exists(const QByteArray &username) const {

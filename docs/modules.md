@@ -50,6 +50,17 @@ something when the module is activated, or deactivated.
 
 # Events
 
+#### Models
+
+For the dataclass models, see: 
+
+- [src/python/qircd/events.py](../src/python/qircd/events.py) 
+- [src/python/qircd/models.py](../src/python/qircd/models.py)
+
+#### Cancel
+
+All events have the `.cancel(message: str)` method, in case you want to cancel them.
+
 ### Raw Message (incoming)
 
 This runs early - before cIRCa has started parsing the IRC line.
@@ -83,13 +94,13 @@ User is about to join a channel.
 
 ```python3
 @qirc.on(QIRCEvent.CHANNEL_JOIN)
-def join_handler(self, join: ChannelJoin) -> ChannelJoin:
-    print("joining", join.channel.name)
+def join_handler(self, ev: ChannelJoin) -> ChannelJoin:
+    print("joining", ev.channel.name)
 
-    if join.account.name == "user1":
-        join.cancel("not allowed!")
+    if ev.account.name == "user1":
+        ev.cancel("not allowed!")
 
-    return join
+    return ev
 ```
 
 ### Channel Part
@@ -98,10 +109,10 @@ User is about to leave a channel.
 
 ```python3
 @qirc.on(QIRCEvent.CHANNEL_PART)
-def channel_leave_handler(self, part: ChannelPart) -> ChannelPart:
-    print("channel part", part.account.name_or_nick())
-    part.message = "Face the wrath of a thousand suns."
-    return part
+def channel_leave_handler(self, ev: ChannelPart) -> ChannelPart:
+    print("channel part", ev.account.name_or_nick())
+    ev.message = "Face the wrath of a thousand suns."
+    return ev
 ```
 
 ### Private Message
@@ -127,6 +138,20 @@ def allcaps_handler(self, msg: Message) -> Message:
     if msg.channel.name == "loud":
         msg.text = msg.text.upper()
     return msg
+```
+
+### Nick change
+
+Intercept an IRC nick change.
+
+```python3
+@qirc.on(QIRCEvent.NICK_CHANGE)
+def nick_change(self, ev: NickChange) -> NickChange:
+    print(ev.old_nick, ev.new_nick)
+
+    # enforce random nicknames
+    ev.new_nick = random.choice(["foo", "bar", "bob", "alice"])
+    return ev
 ```
 
 ### Peer Max Connections

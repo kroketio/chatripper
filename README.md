@@ -4,9 +4,9 @@ Fast, self-hosted, highly scriptable chat platform for team communications.
 
 **Work in progress**
 
-## Design philosophy
+### Design philosophy
 
-cIRCa is an IRC server, but unlike others. Read [more](docs/design.md).
+cIRCa is based on IRC. Read [more here](docs/design.md).
 
 ## Features
 

@@ -37,6 +37,29 @@ public:
   QEventPeerMaxConnections() = default;
 };
 
+class QEventNickChange final : public QEventBase {
+  Q_GADGET
+  Q_PROPERTY(QByteArray old_nick MEMBER old_nick)
+  Q_PROPERTY(QByteArray new_nick MEMBER new_nick)
+  Q_PROPERTY(bool from_server MEMBER from_server)
+  Q_PROPERTY(QSharedPointer<QObject> account READ getAccount WRITE setAccount)
+public:
+  // t:str
+  QByteArray old_nick;
+  // t:str
+  QByteArray new_nick;
+
+  // t:bool d:False
+  bool from_server = false;
+
+  QSharedPointer<Account> account;
+
+  QEventNickChange() = default;
+
+  QSharedPointer<QObject> getAccount() const;
+  void setAccount(const QSharedPointer<QObject>& a);
+};
+
 class QEventRawMessage final : public QEventBase {
   Q_GADGET
   Q_PROPERTY(QByteArray raw MEMBER raw)
@@ -191,7 +214,8 @@ public:
     CHANNEL_JOIN          = 1 << 3,
     CHANNEL_PART          = 1 << 4,
     RAW_MSG               = 1 << 5,
-    PEER_MAX_CONNECTIONS  = 1 << 6
+    PEER_MAX_CONNECTIONS  = 1 << 6,
+    NICK_CHANGE           = 1 << 7
   };
   Q_ENUM(QIRCEvent)
 };
@@ -212,3 +236,4 @@ Q_DECLARE_METATYPE(QSharedPointer<QEventAuthUser>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventRawMessage>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventPeerMaxConnections>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventChannelPart>)
+Q_DECLARE_METATYPE(QSharedPointer<QEventNickChange>)

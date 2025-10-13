@@ -23,11 +23,6 @@ namespace irc {
     m_available_modes_count = static_cast<unsigned int>(UserModes::COUNT);
     m_time_connection_established = QDateTime::currentSecsSinceEpoch();
 
-    m_account = Account::create();
-    m_account->setRandomUID();
-    m_account->add_connection(this);
-    g::ctx->account_insert_cache(m_account);
-
     // m_host = socket->peerAddress().toString().toUtf8();
     m_host = g::defaultHost;
 
@@ -46,16 +41,6 @@ namespace irc {
     connect(m_socket, &QTcpSocket::readyRead, this, &client_connection::onReadyRead);
     connect(m_socket, &QTcpSocket::disconnected, this, &client_connection::onSocketDisconnected);
   }
-
-  // void wefe() {
-  //   m_account = Account::create();
-  //   m_account->setRandomUID();
-  //   m_account->add_connection(this);
-  //   g::ctx->account_insert_cache(m_account);
-  //
-  //   // m_host = socket->peerAddress().toString().toUtf8();
-  //   m_host = g::defaultHost;
-  // }
 
   void client_connection::handleCAP(const QList<QByteArray> &args) {
     if (!setup_tasks.has(ConnectionSetupTasks::CAP_EXCHANGE)) {
@@ -365,15 +350,48 @@ namespace irc {
       return;
     }
 
-    const auto& new_nick = args.first();
-    setNick(new_nick);
+    const auto &new_nick = args.first();
 
-    if (!m_account->setNick(args.at(0))) {
-      auto _nick = nick();
-      reply_num(433, _nick + " :Nickname is already in use");
-    } else {
+    // valid?
+    if (!isValidNick(new_nick)) {
+      reply_num(432, new_nick + " :Erroneous nickname");
+      return;
+    }
+
+    // already active?
+    const auto irc_nick_ptr = g::ctx->irc_nick_get(new_nick.toLower());
+    if (!irc_nick_ptr.isNull()) {
+      reply_num(433, new_nick + " :Nickname is already in use");
+      return;
+    }
+
+    if (setup_tasks.has(ConnectionSetupTasks::NICK)) {
+      setNick(new_nick);
       setup_tasks.clear(ConnectionSetupTasks::NICK);
       try_finalize_setup();
+      return;
+    }
+
+    if (!setup_tasks.empty()) {
+      reply_num(432, "Finish connect bootstrap first");
+      return;
+    }
+
+    auto const account_nick = nick();
+
+    // past connect bootstrap at this point
+    if (new_nick == account_nick) {
+      reply_num(431, "Your nick is already that");
+      return;
+    }
+
+    const auto nick_change = QSharedPointer<QEventNickChange>(new QEventNickChange());
+    nick_change->new_nick = args.first();
+    nick_change->old_nick = account_nick;
+    nick_change->account = m_account;
+
+    if (!m_account->setNick(nick_change)) {
+      reply_num(433, new_nick + " :Nickname is already in use");
     }
   }
 
@@ -428,7 +446,7 @@ namespace irc {
 
     const QByteArray msg =
         tag_prefix +
-        ":" + src->prefix(0) +
+        ":" + src->prefix() +
         " PRIVMSG " + target +
         " :" + message->text + "\r\n";
 
@@ -438,7 +456,6 @@ namespace irc {
   void client_connection::channel_join(const QSharedPointer<QEventChannelJoin> &event) {
     if (event.isNull()) return;
 
-    const auto _nick = nick();
     const auto &account = event->account;
     const auto &channel = event->channel;
 
@@ -451,7 +468,7 @@ namespace irc {
 
     // notification of a participant joining
     if (event->account != m_account) {
-      const auto acc_prefix = account->prefix(0);
+      const auto acc_prefix = account->prefix();
 
       const QByteArray msg = ":" + acc_prefix + " JOIN :#" + channel->name() + "\r\n";
       emit sendData(msg);
@@ -466,6 +483,7 @@ namespace irc {
     }
 
     // we are joining
+    auto account_nick = nick();
 
     // this connection is already in the channel
     // @TODO: move `channels` mutations to setters/getters+lock
@@ -489,7 +507,7 @@ namespace irc {
     } else {
       // :irc.local 333 bla #test bbb!dsc@127.0.0.1 :1758051783.
       // @TODO: implement RPL_TOPICWHOTIME^
-      send_raw("332 " + _nick + " #" + channel_name + " :" + channel->topic());
+      send_raw("332 " + account_nick + " #" + channel_name + " :" + channel->topic());
     }
 
     // names
@@ -503,9 +521,9 @@ namespace irc {
         names << acc->nick();
     }
 
-    const QByteArray namesPrefix = "353 " + _nick + " = " + channel->name() + " :";
+    const QByteArray namesPrefix = "353 " + account_nick + " = " + channel->name() + " :";
     send_raw(namesPrefix + names.join(" "));
-    send_raw("366 " + _nick + " " + "#" + channel->name() + " :End of NAMES list");
+    send_raw("366 " + account_nick + " " + "#" + channel->name() + " :End of NAMES list");
   }
 
   void client_connection::channel_part(const QSharedPointer<QEventChannelPart> &event) {
@@ -528,7 +546,7 @@ namespace irc {
         return;
       rlock.unlock();
 
-      const auto acc_prefix = event->account->prefix(0);
+      const auto acc_prefix = event->account->prefix();
       const QByteArray reason = event->message.isEmpty() ? "" : " :" + event->message;
       const QByteArray msg = ":" + acc_prefix + " PART #" + channel_name + reason + "\r\n";
       emit sendData(msg);
@@ -549,18 +567,20 @@ namespace irc {
     for (auto& name : chans) {
       const auto channel_name = name.mid(1);
       if (!channel_name.isEmpty()) {
-        const auto channel = Channel::get(channel_name);
+
+        const auto event = QSharedPointer<QEventChannelJoin>(new QEventChannelJoin);
+        event->from_system = false;
+        event->account = m_account;
+
+        const auto channel = Channel::get_or_create(channel_name);
         if (!channel.isNull()) {
-          const auto event = QSharedPointer<QEventChannelJoin>(new QEventChannelJoin);
-          event->from_system = false;
           event->channel = channel;
-          event->account = m_account;
-          return channel->join(event);
+          channel->join(event);
+        } else {
+          reply_num(476, args.at(0) + " :Invalid channel name");
         }
       }
     }
-
-    reply_num(476, args.at(0) + " :Invalid channel name");
   }
 
   void client_connection::handlePART(const QList<QByteArray> &args) {
@@ -759,8 +779,6 @@ namespace irc {
   }
 
   void client_connection::change_host(const QByteArray &new_host) {
-    m_host = new_host;
-
     if (!setup_tasks.empty())
       return;
 
@@ -770,29 +788,28 @@ namespace irc {
     // m_nick = new_host;
   }
 
-  bool client_connection::change_nick(const QByteArray &new_nick) {
-    setNick(new_nick);
+  bool client_connection::change_nick(const QSharedPointer<QEventNickChange> &event) {
+    // 1. if we ourselves
+    //   - first check if we even need to change nick
+    //   - same connection? use local prefix
+    //   - from another connection? does not matter.
+    // 2. if delivered to someone else
+    //   - prefix(old_nick)
 
-    const QByteArray msg = ":" + prefix() + " NICK :" + new_nick + "\r\n";
-    emit sendData(msg);
-    return true;
-  }
+    const auto account_nick = nick();
+    if (event->account == m_account) {
+      if (m_nick == account_nick)
+        return false;
 
-  bool client_connection::change_nick(const QSharedPointer<Account> &acc, const QByteArray &old_nick, const QByteArray &new_nick) {
-    setNick(new_nick);
-
-    const auto _prefix = acc->prefix(0);
-    if (_prefix.isEmpty()) {
-      qWarning() << "CONN NOT FOUND, could not establish prefix" << acc->name();
-      return false;
+      auto _prefix = event->old_nick + "!" + user + "@" + m_host;
+      const QByteArray msg = ":" + _prefix + " NICK :" + event->new_nick + "\r\n";
+      emit sendData(msg);
+      return true;
     }
 
-    const QByteArray msg = ":" + _prefix + " NICK :" + new_nick + "\r\n";
+    auto _prefix = event->account->prefix(event->old_nick);
+    const QByteArray msg = ":" + _prefix + " NICK :" + event->new_nick + "\r\n";
     emit sendData(msg);
-
-    setup_tasks.clear(ConnectionSetupTasks::NICK);
-    try_finalize_setup();
-
     return true;
   }
 
@@ -813,6 +830,7 @@ namespace irc {
   }
 
   QByteArray client_connection::prefix() {
+    QReadLocker rlock(&mtx_lock);
     auto const _nick = nick();
     return _nick + "!" + (user.isEmpty() ? QByteArray("user") : user) + "@" + m_host;
   }
@@ -866,7 +884,7 @@ namespace irc {
   }
 
   void client_connection::try_finalize_setup() {
-    if (_is_setup || !setup_tasks.empty())
+    if (is_ready || !setup_tasks.empty())
       return;
 
     const auto server_password = m_server->password();
@@ -882,7 +900,27 @@ namespace irc {
       }
     }
 
+    if (m_account.isNull()) {
+      m_account = Account::create();
+      m_account->setNickByForce(m_nick);
+      m_account->setRandomUID();
+      g::ctx->account_insert_cache(m_account);
+    }
+
+    // sync nick (account has precedence)
+    const auto account_nick = m_account->nick();
+    if (account_nick != m_nick) {
+      auto _prefix = m_nick + "!" + user + "@" + m_host;
+      m_nick = account_nick;
+      const QByteArray msg = ":" + _prefix + " NICK :" + account_nick + "\r\n";
+      emit sendData(msg);
+    }
+
+    m_account->add_connection(this);
     auto const _nick = nick();
+
+    // ensure it's in cache
+    g::ctx->irc_nicks_insert_cache(_nick, m_account);
 
     reply_num(1, "Hi, welcome to IRC");
     reply_num(2, "Your host is " + ThreadedServer::serverName() + ", running version cIRCa-0.1");
@@ -906,7 +944,7 @@ namespace irc {
       channel->join(event);
     }
 
-    _is_setup = true;
+    is_ready = true;
   }
 
   void client_connection::handleAUTHENTICATE(const QList<QByteArray> &args) {
@@ -942,8 +980,11 @@ namespace irc {
 
       auth = account->verifyPassword(auth);
       if (!auth->cancelled()) {
-        account->merge(m_account);
-        m_account = account;
+        if (!m_account.isNull())
+          account->merge(m_account);  // @TODO: fix this when we support SASL login *after* connection bootstrap
+        else {
+          m_account = account;
+        }
 
         reply_num(900, "You are now logged in as " + username);
         reply_num(903, "SASL authentication successful");
@@ -1127,6 +1168,12 @@ namespace irc {
     }
 
     m_last_activity = QDateTime::currentSecsSinceEpoch();
+  }
+
+  QByteArray client_connection::nick() {
+    if (!m_account.isNull())
+      return m_account->nick();
+    return m_nick.isEmpty() ? "*" : m_nick;
   }
 
   client_connection::~client_connection() {

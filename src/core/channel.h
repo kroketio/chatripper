@@ -88,9 +88,6 @@ signals:
   void memberJoinedFailed(const QSharedPointer<Account> &account);
   void memberRemoved(const QSharedPointer<Account> &account);
 
-public slots:
-  void onNickChanged(const QSharedPointer<Account> &ptr, const QByteArray& old_nick, const QByteArray& new_nick, QSet<QSharedPointer<Account>> &broadcasted_accounts);
-
 private:
   mutable QReadWriteLock mtx_lock;
   QByteArray m_name;

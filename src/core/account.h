@@ -57,7 +57,27 @@ public:
   void setPassword(const QByteArray &password);
 
   QByteArray nick();
-  bool setNick(const QByteArray &nick);
+
+  // exclusively used by the Python bindings
+  bool setNick(const QByteArray &nick) {
+    const auto acc = get_by_uid(this->uid());
+    const auto event = QSharedPointer<QEventNickChange>(new QEventNickChange());
+    event->setAccount(acc);
+    event->new_nick = nick;
+    QReadLocker rlock(&mtx_lock);
+    event->old_nick = m_nick;
+    rlock.unlock();
+    this->setNick(event);
+    return true;
+  }
+
+  bool setNickByForce(const QByteArray &nick) {
+    QWriteLocker locker(&mtx_lock);
+    m_nick = nick;
+    return true;
+  }
+
+  bool setNick(const QSharedPointer<QEventNickChange> &event, bool broadcast = true);
 
   [[nodiscard]] QByteArray host() const {
     if (m_host.isEmpty())
@@ -66,14 +86,10 @@ public:
   }
   void setHost(const QByteArray &host);
 
-  [[nodiscard]] QByteArray prefix(const int conn_id = -1) const {
+  [[nodiscard]] QByteArray prefix(const QByteArray &nick_override = "") const {
     QReadLocker locker(&mtx_lock);
-    if (!connections.empty() && conn_id != -1) {
-      const auto conn = connections.at(conn_id);
-      return conn->prefix();
-    }
-
-    throw std::runtime_error("No prefix found, DEBUG ME");
+    auto _nick = nick_override.isEmpty() ? m_nick : nick_override;
+    return _nick + "!" + (m_name.isEmpty() ? "user" : m_name) + "@" + m_host;
   }
 
   [[nodiscard]] bool login(const QString& username, const QString& password) { return true; }
@@ -92,11 +108,11 @@ public:
   QList<irc::client_connection*> connections;
   QHash<QByteArray, QSharedPointer<Channel>> channels;
 
+  mutable QReadWriteLock mtx_lock;
+
 signals:
   void nickChanged(const QByteArray& old_nick, const QByteArray& new_nick);
 private:
-  mutable QReadWriteLock mtx_lock;
-
   QByteArray m_uid;
   QByteArray m_uid_str;
   QByteArray m_name;

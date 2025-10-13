@@ -3,10 +3,31 @@
 #include <QByteArray>
 #include <QSharedPointer>
 #include <QMap>
+#include <QRegularExpression>
 #include "core/account.h"
 #include "core/qtypes.h"
 
 namespace irc {
+  /**
+   * @brief Validates an IRC nickname according to RFC 2812 and IRCv3 (UTF-8 allowed).
+   *
+   * A valid nickname:
+   *   - Must start with a letter or one of [ ] \ ` _ ^ { | }
+   *   - May contain letters, digits, or [ ] \ ` _ ^ { | } -
+   *   - Must be at most 9 characters long
+   *   - May include UTF-8 letters and digits as per IRCv3
+   *
+   * @param nick The nickname to validate (UTF-8 encoded).
+   * @return bool True if the nickname is valid, false otherwise.
+   */
+  inline bool isValidNick(const QByteArray &nick) {
+    const QString s = QString::fromUtf8(nick);
+    static QRegularExpression re(
+      "^[\\p{L}\\[\\]\\\\`_^{|}][\\p{L}\\p{N}\\[\\]\\\\`_^{|}-]{0,8}$"
+    );
+    return re.match(s).hasMatch();
+  }
+
   /**
    * @brief Escapes a message tag value according to IRCv3 message-tags specification.
    *

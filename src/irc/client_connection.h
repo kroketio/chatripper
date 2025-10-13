@@ -63,14 +63,14 @@ namespace irc {
     QByteArray user;
     QByteArray realname;
 
-    void setNick(const QByteArray &new_nick) {
+    QByteArray nick();
+    bool setNick(const QByteArray &new_nick) {
+      if (!m_nick.isEmpty())
+        throw std::runtime_error("use account->nick()");
+
       QWriteLocker wlock(&mtx_lock);
       m_nick = new_nick;
-    }
-
-    QByteArray nick() {
-      QReadLocker rlock(&mtx_lock);
-      return m_nick;
+      return true;
     }
 
     QMap<QByteArray, QSharedPointer<Channel>> channels;
@@ -88,9 +88,7 @@ namespace irc {
     void reply_self(const QByteArray &command, const QByteArray &args);
 
     void channel_part(const QSharedPointer<QEventChannelPart> &event);
-
-    bool change_nick(const QByteArray &new_nick);
-    bool change_nick(const QSharedPointer<Account> &acc, const QByteArray &old_nick, const QByteArray &new_nick);
+    bool change_nick(const QSharedPointer<QEventNickChange> &event);
 
     void self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message);
     void message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QEventMessage> &message) const;
@@ -140,14 +138,12 @@ namespace irc {
     void handleWHO(const QList<QByteArray> &args);
     void try_finalize_setup();
 
-    void broadcastToChannel(Channel *ch, const QByteArray &command, const QByteArray &argtail, bool includeSelf);
-
     ThreadedServer *m_server;
     QSharedPointer<Account> m_account;
 
     QHostAddress m_remote;
 
-    bool _is_setup = false;
+    bool is_ready = false;
 
     // only used during connection setup
     bool user_already_exists = false;
