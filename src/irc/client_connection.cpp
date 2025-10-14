@@ -14,7 +14,7 @@
 namespace irc {
   constexpr static qint64 CHUNK_SIZE = 1024;
 
-  client_connection::client_connection(ThreadedServer* server, QTcpSocket* socket, QObject *parent) : QObject(parent), m_socket(socket), m_server(server) {
+  void client_connection::init() {
     setup_tasks.set(
         ConnectionSetupTasks::CAP_EXCHANGE,
         ConnectionSetupTasks::NICK,
@@ -23,9 +23,6 @@ namespace irc {
     m_available_modes_count = static_cast<unsigned int>(UserModes::COUNT);
     m_time_connection_established = QDateTime::currentSecsSinceEpoch();
 
-    // m_host = socket->peerAddress().toString().toUtf8();
-    m_host = g::defaultHost;
-
     // m_inactivityTimer = new QTimer(this);
     // m_inactivityTimer->setSingleShot(true);
     // connect(m_inactivityTimer, &QTimer::timeout, this, [this]{
@@ -33,13 +30,37 @@ namespace irc {
     // });
     // m_inactivityTimer->start(MAX_INACTIVITY_MS);
 
+    // m_host = socket->peerAddress().toString().toUtf8();
+    m_host = g::defaultHost;
+
     connect(this, &client_connection::sendData, this, &client_connection::onWrite);
   }
 
-  void client_connection::handleConnection(const QHostAddress &peer_ip) {
-    m_remote = peer_ip;
+  client_connection::client_connection(
+      ThreadedServer* server, QWebSocket* socket, QObject *parent) : QObject(parent), m_websocket(socket), m_server(server) {
+    init();
+
+    m_websocket = socket;
+    connect(m_websocket, &QWebSocket::binaryMessageReceived, this, &client_connection::parseIncomingWS);
+    connect(m_websocket, &QWebSocket::textMessageReceived, [=](const QString& text) {
+      this->parseIncomingWS(text.toUtf8());  // in case web clients send text
+    });
+  }
+
+  client_connection::client_connection(
+      ThreadedServer* server, QTcpSocket* socket, QObject *parent) : QObject(parent), m_socket(socket), m_server(server) {
+    init();
+  }
+
+  void client_connection::handleConnection(const uint32_t peer_ip) {
+    m_remote = QHostAddress(peer_ip);
     connect(m_socket, &QTcpSocket::readyRead, this, &client_connection::onReadyRead);
     connect(m_socket, &QTcpSocket::disconnected, this, &client_connection::onSocketDisconnected);
+  }
+
+  void client_connection::handleWSConnection(const uint32_t peer_ip) {
+    m_remote = QHostAddress(peer_ip);
+    connect(m_websocket, &QWebSocket::disconnected, this, &client_connection::onSocketDisconnected);
   }
 
   void client_connection::handleCAP(const QList<QByteArray> &args) {
@@ -959,7 +980,8 @@ namespace irc {
 
   void client_connection::onSocketDisconnected() {
     auto const _nick = nick();
-    m_account->onConnectionDisconnected(this, _nick);
+    if (!m_account.isNull())
+      m_account->onConnectionDisconnected(this, _nick);
     emit disconnected(_nick);
   }
 
@@ -1132,6 +1154,11 @@ namespace irc {
   }
 
   void client_connection::onWrite(const QByteArray &data) const {
+    if (m_websocket && m_websocket->isValid()) {
+      m_websocket->sendBinaryMessage(data);
+      return;
+    }
+
     if (!m_socket || !m_socket->isOpen() || !m_socket->isWritable())
       return;
 
@@ -1179,6 +1206,10 @@ namespace irc {
 
   void client_connection::disconnect() const {
     m_socket->disconnectFromHost();
+  }
+
+  void client_connection::parseIncomingWS(QByteArray line) {
+    return parseIncoming(line);
   }
 
   void client_connection::parseIncoming(QByteArray &line) {
@@ -1259,6 +1290,9 @@ namespace irc {
   }
 
   client_connection::~client_connection() {
-    m_socket->deleteLater();
+    if (m_websocket != nullptr)
+      m_websocket->close();
+    else
+      m_socket->deleteLater();
   }
 }

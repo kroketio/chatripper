@@ -16,6 +16,10 @@ namespace g {
   unsigned int irc_motd_size;
   QFileInfo irc_motd_path;
   time_t irc_motd_last_modified;
+  QByteArray ircServerListeningHost;
+  quint16 ircServerListeningPort;
+  QByteArray wsServerListeningHost;
+  quint16 wsServerListeningPort;
   WebSessionStore* webSessions = nullptr;
   QThread* mainThread = nullptr;
   Ctx* ctx = nullptr;

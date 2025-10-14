@@ -42,6 +42,7 @@ public:
   QString homeDir;
 
   irc::ThreadedServer* irc_server = nullptr;
+  irc::ThreadedServer* irc_ws = nullptr;
   WebServer *web_server = nullptr;
   SnakePit* snakepit = nullptr;
 
@@ -89,8 +90,6 @@ public:
   QHash<QByteArray, QSharedPointer<Channel>> channels;
   QList<QSharedPointer<Channel>> get_channels_ordered() const;
   QList<QSharedPointer<Account>> get_accounts_ordered() const;
-
-  void startIRC(int port, const QByteArray& password);
 
   static Ctx* instance() {
     return g::ctx;

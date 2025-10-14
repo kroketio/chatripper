@@ -15,7 +15,7 @@ namespace irc {
   class ThreadedServer final : public QTcpServer {
     Q_OBJECT
 
-    public:
+  public:
     explicit ThreadedServer(
       int thread_count,
       int max_per_ip,
@@ -27,7 +27,7 @@ namespace irc {
     QByteArray motd();
     QStringList capabilities;
 
-    QHash<QHostAddress,int> activeConnections;
+    QHash<uint32_t,int> activeConnections;
     QMutex activeConnectionsMutex;
 
   protected:

@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QMutexLocker>
 #include <QWriteLocker>
+#include <QWebSocket>
 #include <QReadLocker>
 #include <QElapsedTimer>
 #include <QHash>
@@ -32,10 +33,20 @@ namespace irc {
       USER         = 1 << 2
     };
 
-    explicit client_connection(ThreadedServer* server, QTcpSocket* socket, QObject* parent = nullptr);
-    ~client_connection() override;
+    explicit client_connection(
+      ThreadedServer* server,
+      QTcpSocket* socket,
+      QObject* parent = nullptr);
+    explicit client_connection(
+      ThreadedServer* server,
+      QWebSocket* socket,
+      QObject* parent = nullptr);
 
-    void handleConnection(const QHostAddress &peer_ip);
+    ~client_connection() override;
+    void init();
+
+    void handleConnection(uint32_t peer_ip);
+    void handleWSConnection(uint32_t peer_ip);
 
     Flags<ConnectionSetupTasks> setup_tasks;
     Flags<PROTOCOL_CAPABILITY> capabilities;
@@ -46,6 +57,7 @@ namespace irc {
     }
 
     QTcpSocket *m_socket = nullptr;
+    QWebSocket *m_websocket = nullptr;
     bool logged_in = false;
 
     // disconnect slow setup/register
@@ -112,6 +124,7 @@ namespace irc {
   private slots:
     void onReadyRead();
     void onSocketDisconnected();
+    void parseIncomingWS(QByteArray line);
   public slots:
     void onWrite(const QByteArray &data) const;
   private:

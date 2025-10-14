@@ -63,8 +63,5 @@ int main(int argc, char *argv[]) {
 #endif
 
   const auto ctx = new Ctx();
-  ctx->startIRC(port, password);
-
-  qInfo("IRC server listening on port %hu", port);
   return app.exec();
 }

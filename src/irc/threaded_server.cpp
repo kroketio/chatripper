@@ -62,18 +62,25 @@ namespace irc {
   }
 
   void ThreadedServer::incomingConnection(qintptr socketDescriptor) {
-    QHostAddress remote_ip;
+    uint32_t remote_ip = 0;  // @TODO: rip ipv6
+    quint16 local_port = 0;
 
     // max connections per IP
-    // @TODO: emit event when hit
 #if defined(Q_OS_UNIX) || defined(Q_OS_LINUX)
     sockaddr_in addr{};
     socklen_t len = sizeof(addr);
     int fd = static_cast<int>(socketDescriptor);
 
     if (getpeername(fd, reinterpret_cast<sockaddr*>(&addr), &len) == 0) {
-      remote_ip = QHostAddress(ntohl(addr.sin_addr.s_addr));
+      remote_ip = ntohl(addr.sin_addr.s_addr);
     }
+
+    // get local port
+    sockaddr_in local_addr{};
+    socklen_t local_len = sizeof(local_addr);
+    if (getsockname(fd, reinterpret_cast<sockaddr*>(&local_addr), &local_len) == 0)
+      local_port = ntohs(local_addr.sin_port);
+
 #elif defined(Q_OS_WIN)
     sockaddr_in addr{};
     int len = sizeof(addr);
@@ -83,7 +90,7 @@ namespace irc {
       remote_ip = QHostAddress(ntohl(addr.sin_addr.s_addr));
     }
 #endif
-    if (!remote_ip.isNull()) {
+    if (remote_ip != 0) {
       QMutexLocker locker(&activeConnectionsMutex);
 
       if (activeConnections[remote_ip] >= m_max_per_ip) {
@@ -95,7 +102,7 @@ namespace irc {
         if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::PEER_MAX_CONNECTIONS)) {
           auto ev = QSharedPointer<QEventPeerMaxConnections>(new QEventPeerMaxConnections());
           ev->connections = m_max_per_ip;
-          ev->ip = remote_ip.toString();
+          ev->ip = QHostAddress(remote_ip).toString();
 
           const auto result = g::ctx->snakepit->event(
             QEnums::QIRCEvent::RAW_MSG,
@@ -115,7 +122,8 @@ namespace irc {
     QMetaObject::invokeMethod(
       worker, "handleConnection", Qt::QueuedConnection,
       Q_ARG(qintptr, socketDescriptor),
-      Q_ARG(QHostAddress, remote_ip));
+      Q_ARG(uint32_t, remote_ip),
+      Q_ARG(quint16, local_port));
   }
 
   QByteArray ThreadedServer::serverName() {

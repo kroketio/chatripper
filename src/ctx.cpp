@@ -11,6 +11,9 @@
 using namespace std::chrono;
 
 Ctx::Ctx() {
+  g::wsServerListeningPort = 8200;
+  g::ircServerListeningPort = 6667;
+
   g::ctx = this;
   Utils::init();
 
@@ -50,11 +53,9 @@ Ctx::Ctx() {
   SQL::account_get_all();  // trigger cache insertion
   CLOCK_MEASURE_END(start_init_db_preload, "initial db load");
 
-  // irc server - threadpool 4, max 5 connections per IP
+  // irc/ws server - threadpool 4, max 5 connections per IP
   irc_server = new irc::ThreadedServer(4, 10, this);
-
-  if (!irc_server->listen(QHostAddress::Any, 6667))
-    qFatal("Failed to start threaded server");  // @TODO: do something
+  irc_ws = new irc::ThreadedServer(4, 10, this);
 
   // web server
   m_web_thread = new QThread();
@@ -85,6 +86,21 @@ Ctx::Ctx() {
 
   // Python
   snakepit = new SnakePit(this);
+
+  // start IRC servers
+  if (!irc_server->listen(QHostAddress::AnyIPv4, g::ircServerListeningPort)) {
+    qCritical("Failed to start IRC server on port %hu", g::ircServerListeningPort);
+    qFatal("Exiting");
+  } else {
+    qInfo("IRC server listening on port %hu", g::ircServerListeningPort);
+  }
+
+  if (!irc_ws->listen(QHostAddress::AnyIPv4, g::wsServerListeningPort)) {
+    qCritical("Failed to start WS server on port %hu", g::wsServerListeningPort);
+    qFatal("Exiting");
+  } else {
+    qInfo("WS server listening on port %hu", g::wsServerListeningPort);
+  }
 }
 
 bool Ctx::account_username_exists(const QByteArray &username) const {
@@ -213,11 +229,6 @@ void Ctx::createDefaultFiles() {
 
     QFile::setPermissions(to_path, QFile::ReadUser | QFile::WriteUser);
   }
-}
-
-
-void Ctx::startIRC(const int port, const QByteArray& password) {
-  irc_server = new irc::ThreadedServer(4, 5);
 }
 
 void Ctx::createConfigDirectory(const QStringList &lst) {
