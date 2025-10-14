@@ -10,6 +10,7 @@ namespace irc {
     ACCOUNT_NOTIFY,   // https://ircv3.net/specs/extensions/account-notify
     ECHO_MESSAGE,
     ZNC_SELF_MESSAGE,
-    FISH              //
+    FISH,
+    CHANNEL_RENAME  // https://ircv3.net/specs/extensions/channel-rename
   };
 }

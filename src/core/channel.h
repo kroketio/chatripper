@@ -51,6 +51,8 @@ public:
 
   void setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg = {});
 
+  static bool rename(const QSharedPointer<QEventChannelRename> &event);
+
   static QSharedPointer<Channel> get(const QByteArray &channel_name);
   static QSharedPointer<Channel> get_or_create(const QByteArray &channel_name);
 

@@ -87,6 +87,7 @@ namespace irc {
     void reply_num(int code, const QByteArray &text);
     void reply_self(const QByteArray &command, const QByteArray &args);
 
+    bool channel_rename(const QSharedPointer<QEventChannelRename> &event);
     void channel_part(const QSharedPointer<QEventChannelPart> &event);
     bool change_nick(const QSharedPointer<QEventNickChange> &event);
 
@@ -125,6 +126,7 @@ namespace irc {
     void handlePONG(const QList<QByteArray> &args);
     void handleJOIN(const QList<QByteArray> &args);
     void handlePART(const QList<QByteArray> &args);
+    void handleRENAME(const QList<QByteArray> &args);
     void handlePRIVMSG(const QList<QByteArray> &args);
     void handleQUIT(const QList<QByteArray> &args);
     void handleNAMES(const QList<QByteArray> &args);

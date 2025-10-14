@@ -52,6 +52,11 @@ void PyTypeRegistry::registerAll() {
       [](const QEventBase* ev) -> const QEventBase* {
           return dynamic_cast<const QEventNickChange*>(ev);
       });
+
+  registerType("ChannelRename", &QEventChannelRename::staticMetaObject,
+      [](const QEventBase* ev) -> const QEventBase* {
+          return dynamic_cast<const QEventChannelRename*>(ev);
+      });
 }
 
 const RegisteredType *PyTypeRegistry::findByPyName(const QString &pyName) {

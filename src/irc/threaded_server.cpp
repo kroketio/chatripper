@@ -41,6 +41,7 @@ namespace irc {
     capabilities << "znc.in/self-message";
     capabilities << "fish";
     capabilities << "sasl";
+    capabilities << "draft/channel-rename";
 
     setup_pool(thread_count);
   }

@@ -680,6 +680,61 @@ namespace irc {
     m_socket->disconnectFromHost();
   }
 
+  void client_connection::handleRENAME(const QList<QByteArray> &args) {
+    if (args.isEmpty() || args.size() <= 1)
+      return;
+
+    QByteArray message;
+    auto from_channel = args.first();
+    auto to_channel = args.at(1);
+
+    if (from_channel.startsWith("#"))
+      from_channel = from_channel.mid(1);
+
+    if (to_channel.startsWith("#"))
+      to_channel = to_channel.mid(1);
+
+    auto channel_from = Channel::get(from_channel);
+    auto channel_to = Channel::get(to_channel);
+
+    if (channel_from.isNull()) {
+      // :irc.example.com FAIL RENAME CANNOT_RENAME #global %local :Some error
+      QByteArrayList msg;
+      msg << ":" + prefix();
+      msg << "FAIL RENAME CANNOT_RENAME";
+      msg << "#" + from_channel;
+      msg << "#" + to_channel;
+      msg << ":Channel to rename does not exist\r\n";
+
+      emit sendData(msg.join(" "));
+      return;
+    }
+
+    if (!channel_to.isNull()) {
+      // :irc.example.com FAIL RENAME CHANNEL_NAME_IN_USE #evil #good :Channel already exists
+      QByteArrayList msg;
+      msg << ":" + prefix();
+      msg << "FAIL RENAME CHANNEL_NAME_IN_USE";
+      msg << "#" + from_channel;
+      msg << "#" + to_channel;
+      msg << ":Channel already exists\r\n";
+
+      emit sendData(msg.join(" "));
+      return;
+    }
+
+    if (args.size() > 2)
+      message = args.at(2);
+
+    const auto rename = QSharedPointer<QEventChannelRename>(new QEventChannelRename);
+    rename->old_name = from_channel;
+    rename->new_name = to_channel;
+    rename->account = m_account;
+    rename->message = message;
+    rename->channel = channel_from;
+    Channel::rename(rename);
+  }
+
   void client_connection::handleNAMES(const QList<QByteArray> &args) {
     // if (args.isEmpty()) {
     //   // list names for all joined channels
@@ -786,6 +841,31 @@ namespace irc {
     // https://ircv3.net/specs/extensions/chghost
     // write(":" + prefix() + " CHGHOST " + m_nick + " " + new_host + "\r\n");
     // m_nick = new_host;
+  }
+
+  bool client_connection::channel_rename(const QSharedPointer<QEventChannelRename> &event) {
+    if (event->old_name == event->new_name)
+      return false;
+
+    const auto from_channel = "#" + event->old_name;
+    const auto to_channel = "#" + event->new_name;
+
+    if (capabilities.has(PROTOCOL_CAPABILITY::CHANNEL_RENAME)) {
+      QByteArray message;
+      if (!event->message.isEmpty())
+        message += ": " + event->message;
+
+      const QByteArray msg = ":" + prefix() + " RENAME " + from_channel + " " + to_channel + message + "\r\n";
+      emit sendData(msg);
+      return true;
+    }
+
+    // for clients that do not support cap channel rename
+    const QByteArray part_msg = ":" + prefix() + " PART " + "#" + from_channel + ":Changing the channel name" + "\r\n";
+    emit sendData(part_msg);
+    const QByteArray join_msg = ":" + prefix() + " JOIN " + "#" + to_channel + "\r\n";
+    emit sendData(join_msg);
+    return true;
   }
 
   bool client_connection::change_nick(const QSharedPointer<QEventNickChange> &event) {
@@ -1150,6 +1230,8 @@ namespace irc {
       handleQUIT(parts);
     else if (cmd == "NAMES")
       handleNAMES(parts);
+    else if (cmd == "RENAME")
+      handleRENAME(parts);
     else if (cmd == "TOPIC")
       handleTOPIC(parts);
     else if (cmd == "LUSERS")

@@ -6,6 +6,14 @@ from typing import List, Any
 from .models import *
 
 @dataclass
+class ChannelRename(QEventBase, QClass):
+    old_name: str
+    new_name: str
+    message: str
+    account: Account
+    channel: Channel
+
+@dataclass
 class PeerMaxConnections(QEventBase, QClass):
     connections: int
     ip: str

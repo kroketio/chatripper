@@ -76,3 +76,20 @@ QSharedPointer<QObject> QEventNickChange::getAccount() const {
 void QEventNickChange::setAccount(const QSharedPointer<QObject>& a) {
   account = qSharedPointerCast<Account>(a);
 }
+
+// QEventChannelRename
+QSharedPointer<QObject> QEventChannelRename::getChannel() const {
+  return qSharedPointerCast<QObject>(channel);
+}
+
+void QEventChannelRename::setChannel(const QSharedPointer<QObject>& c) {
+  channel = qSharedPointerCast<Channel>(c);
+}
+
+QSharedPointer<QObject> QEventChannelRename::getAccount() const {
+  return qSharedPointerCast<QObject>(account);
+}
+
+void QEventChannelRename::setAccount(const QSharedPointer<QObject>& a) {
+  account = qSharedPointerCast<Account>(a);
+}

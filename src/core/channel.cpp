@@ -246,6 +246,46 @@ void Channel::message(const irc::client_connection *from_conn, const QSharedPoin
   }
 }
 
+// @TODO:
+// 1. throttle channel renames  (:irc.example.com FAIL RENAME CANNOT_RENAME #magical-girls #witches :This channel has been renamed recently)
+// 2. register channel redirects in db
+// 3. test if this actually works
+// 4. check permissions if user may rename
+bool Channel::rename(const QSharedPointer<QEventChannelRename> &event) {
+  if (event->old_name == event->new_name)
+    return false;
+
+  const auto channel_from = get(event->channel->name());
+  if (channel_from.isNull())
+    return false;
+
+  if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::CHANNEL_RENAME)) {
+    const auto result = g::ctx->snakepit->event(
+      QEnums::QIRCEvent::CHANNEL_RENAME,
+      event);
+
+    if (result.canConvert<QSharedPointer<QEventNickChange>>()) {
+      const auto resPtr = result.value<QSharedPointer<QEventNickChange>>();
+      if (resPtr->cancelled())
+        return false;
+    }
+  }
+
+  channel_from->setName(event->new_name);
+
+  // broadcast
+  for (const auto& acc: event->channel->members()) {
+    for (const auto&conn : acc->connections) {
+      QMetaObject::invokeMethod(conn,
+        [conn, event] {
+          conn->channel_rename(event);
+        }, Qt::QueuedConnection);
+    }
+  }
+
+  return true;
+}
+
 void Channel::setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg) {
   QWriteLocker locker(&mtx_lock);
   using irc::ChannelModes;

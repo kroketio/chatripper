@@ -26,6 +26,33 @@ public:
   [[nodiscard]] bool cancelled() const { return _cancel; }
 };
 
+class QEventChannelRename final : public QEventBase {
+  Q_GADGET
+  Q_PROPERTY(QSharedPointer<QObject> channel READ getChannel WRITE setChannel)
+  Q_PROPERTY(QSharedPointer<QObject> account READ getAccount WRITE setAccount)
+  Q_PROPERTY(QByteArray old_name MEMBER old_name)
+  Q_PROPERTY(QByteArray new_name MEMBER new_name)
+  Q_PROPERTY(QByteArray message MEMBER message)
+public:
+  // t:str
+  QByteArray old_name;
+  // t:str
+  QByteArray new_name;
+  // t:str
+  QByteArray message;
+
+  QSharedPointer<Account> account;
+  QSharedPointer<Channel> channel;
+
+  QSharedPointer<QObject> getChannel() const;
+  void setChannel(const QSharedPointer<QObject>& c);
+
+  QSharedPointer<QObject> getAccount() const;
+  void setAccount(const QSharedPointer<QObject>& a);
+
+  QEventChannelRename() = default;
+};
+
 class QEventPeerMaxConnections final : public QEventBase {
   Q_GADGET
   Q_PROPERTY(int connections MEMBER connections)
@@ -215,7 +242,8 @@ public:
     CHANNEL_PART          = 1 << 4,
     RAW_MSG               = 1 << 5,
     PEER_MAX_CONNECTIONS  = 1 << 6,
-    NICK_CHANGE           = 1 << 7
+    NICK_CHANGE           = 1 << 7,
+    CHANNEL_RENAME        = 1 << 8
   };
   Q_ENUM(QIRCEvent)
 };
@@ -237,3 +265,4 @@ Q_DECLARE_METATYPE(QSharedPointer<QEventRawMessage>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventPeerMaxConnections>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventChannelPart>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventNickChange>)
+Q_DECLARE_METATYPE(QSharedPointer<QEventChannelRename>)

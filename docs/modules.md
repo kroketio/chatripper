@@ -73,6 +73,31 @@ def raw_message_handler(self, msg: RawMessage) -> RawMessage:
     return msg
 ```
 
+### Private Message
+
+Incoming private message.
+
+```python3
+@qirc.on(QIRCEvent.PRIVATE_MSG)
+def private_message_handler(self, msg: Message) -> Message:
+    print("from", msg.account)
+    print("to", msg.dest)
+    return msg
+```
+
+### Channel Message
+
+Incoming channel message.
+
+```python3
+@qirc.on(QIRCEvent.CHANNEL_MSG)
+def allcaps_handler(self, msg: Message) -> Message:
+    # modify all messages to all caps for channel #loud
+    if msg.channel.name == "loud":
+        msg.text = msg.text.upper()
+    return msg
+```
+
 ### Authentication handler
 
 Implement custom authentication by providing a SASL handler, for example to validate against a database, LDAP, or any external system.
@@ -115,29 +140,13 @@ def channel_leave_handler(self, ev: ChannelPart) -> ChannelPart:
     return ev
 ```
 
-### Private Message
-
-Incoming private message.
+### Channel rename
 
 ```python3
-@qirc.on(QIRCEvent.PRIVATE_MSG)
-def private_message_handler(self, msg: Message) -> Message:
-    print("from", msg.account)
-    print("to", msg.dest)
-    return msg
-```
-
-### Channel Message
-
-Incoming channel message.
-
-```python3
-@qirc.on(QIRCEvent.CHANNEL_MSG)
-def allcaps_handler(self, msg: Message) -> Message:
-    # modify all messages to all caps for channel #loud
-    if msg.channel.name == "loud":
-        msg.text = msg.text.upper()
-    return msg
+@qirc.on(QIRCEvent.CHANNEL_RENAME)
+def channel_rename(self, event: ChannelRename) -> ChannelRename:
+    print(event.old_name, event.new_name)
+    return event
 ```
 
 ### Nick change

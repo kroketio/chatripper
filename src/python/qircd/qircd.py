@@ -55,6 +55,7 @@ class QIRCEvent(IntFlag):
     RAW_MSG               = 1 << 5
     PEER_MAX_CONNECTIONS  = 1 << 6
     NICK_CHANGE           = 1 << 7
+    CHANNEL_RENAME        = 1 << 8
 
 class QIRCModule:
     """
