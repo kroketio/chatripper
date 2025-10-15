@@ -439,10 +439,12 @@ namespace irc {
     }
 
     // already active?
-    const auto irc_nick_ptr = g::ctx->irc_nick_get(new_nick.toLower());
-    if (!irc_nick_ptr.isNull()) {
-      reply_num(433, new_nick + " :Nickname is already in use");
-      return;
+    if (!m_account.isNull()) {
+      const auto irc_nick_ptr = g::ctx->irc_nick_get(new_nick.toLower());
+      if (!irc_nick_ptr.isNull()) {
+        reply_num(433, new_nick);
+        return;
+      }
     }
 
     if (setup_tasks.has(ConnectionSetupTasks::NICK)) {
@@ -470,8 +472,9 @@ namespace irc {
     nick_change->old_nick = account_nick;
     nick_change->account = m_account;
 
+    // @TODO: it can fail for other reasons too
     if (!m_account->setNick(nick_change)) {
-      reply_num(433, new_nick + " :Nickname is already in use");
+      reply_num(433, new_nick);
     }
   }
 
@@ -1208,6 +1211,15 @@ namespace irc {
       if (m_passGiven != server_password) {
         reply_num(464, "Password incorrect");
         return forceDisconnect();
+      }
+    }
+
+    // nick is already active?
+    if (m_account.isNull()) {
+      const auto irc_nick_ptr = g::ctx->irc_nick_get(m_nick.toLower());
+      if (!irc_nick_ptr.isNull()) {
+        reply_num(433, m_nick + " :Nickname is already in use");
+        forceDisconnect();
       }
     }
 
