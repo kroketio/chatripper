@@ -155,6 +155,7 @@ class QEventMessage final : public QEventBase {
   Q_PROPERTY(QByteArray host MEMBER host)
   Q_PROPERTY(QByteArray text MEMBER text)
   Q_PROPERTY(QByteArray user MEMBER user)
+  Q_PROPERTY(QByteArray conn_id MEMBER conn_id)
   Q_PROPERTY(QStringList targets MEMBER targets)
   Q_PROPERTY(QByteArray raw MEMBER raw)
   Q_PROPERTY(QSharedPointer<QObject> account READ getAccount WRITE setAccount)
@@ -163,6 +164,7 @@ class QEventMessage final : public QEventBase {
   Q_PROPERTY(bool from_system MEMBER from_system)
 public:
   QByteArray id;
+  QByteArray conn_id;
   // t:Dict[str,Any] d:field(default_factory=dict)
   QMap<QString, QVariant> tags;
   // t:str

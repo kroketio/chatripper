@@ -76,6 +76,7 @@ namespace irc {
     QByteArray realname;
 
     QByteArray nick();
+
     bool setNick(const QByteArray &new_nick) {
       if (!m_nick.isEmpty())
         throw std::runtime_error("use account->nick()");
@@ -103,8 +104,7 @@ namespace irc {
     void channel_part(const QSharedPointer<QEventChannelPart> &event);
     bool change_nick(const QSharedPointer<QEventNickChange> &event);
 
-    void self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message);
-    void message(const QSharedPointer<Account> &src, const QByteArray& target, const QSharedPointer<QEventMessage> &message) const;
+    void message(const QSharedPointer<QEventMessage> &message);
 
     void change_host(const QSharedPointer<Account> &acc, const QByteArray &new_host);
     void change_host(const QByteArray &new_host);
@@ -114,6 +114,8 @@ namespace irc {
     static QByteArray irc_lower(const QByteArray &s);
     static QList<QByteArray> split_irc(const QByteArray &line);
 
+    QString get_ip() const;
+    void forceDisconnect() const;
     void disconnect() const;
     QByteArray prefix();
 
@@ -140,6 +142,7 @@ namespace irc {
     void handleJOIN(const QList<QByteArray> &args);
     void handlePART(const QList<QByteArray> &args);
     void handleRENAME(const QList<QByteArray> &args);
+    void handleCHATHISTORY(const QList<QByteArray> &args);
     void handlePRIVMSG(const QList<QByteArray> &args);
     void handleQUIT(const QList<QByteArray> &args);
     void handleNAMES(const QList<QByteArray> &args);
@@ -167,6 +170,7 @@ namespace irc {
     QByteArray m_buffer;
     QByteArray m_passGiven;
     QByteArray m_host;
+    QByteArray m_uid;
 
     time_t m_last_activity = 0;
     time_t m_time_connection_established = 0;

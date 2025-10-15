@@ -42,7 +42,7 @@ public:
 
   void merge(const QSharedPointer<Account> &from);
 
-  void message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, QSharedPointer<QEventMessage> &message);
+  void message(const irc::client_connection *conn, QSharedPointer<QEventMessage> &message);
 
   void setRandomUID();
 
@@ -99,6 +99,9 @@ public:
 
   void add_channel(const QByteArray &channel);
   void add_connection(irc::client_connection *ptr);
+  bool hasConnections() const {
+    return connections.size() > 0;
+  }
   void onConnectionDisconnected(irc::client_connection *conn, const QByteArray &nick_to_delete);
   void clearConnections();
   ~Account() override;

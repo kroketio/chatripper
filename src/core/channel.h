@@ -47,7 +47,7 @@ public:
   void setServer(const QSharedPointer<Server> &server);
   QSharedPointer<Server> server() const;
 
-  void message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QEventMessage> &message);
+  void message(const irc::client_connection *from_conn, QSharedPointer<QEventMessage> &message);
 
   void setMode(irc::ChannelModes mode, bool adding, const QByteArray &arg = {});
 

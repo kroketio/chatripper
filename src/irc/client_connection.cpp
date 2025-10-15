@@ -15,6 +15,9 @@ namespace irc {
   constexpr static qint64 CHUNK_SIZE = 1024;
 
   void client_connection::init() {
+    const QUuid uuid = QUuid::createUuid();
+    m_uid = uuid.toRfc4122();
+
     setup_tasks.set(
         ConnectionSetupTasks::CAP_EXCHANGE,
         ConnectionSetupTasks::NICK,
@@ -65,7 +68,8 @@ namespace irc {
 
   void client_connection::handleCAP(const QList<QByteArray> &args) {
     if (!setup_tasks.has(ConnectionSetupTasks::CAP_EXCHANGE)) {
-      send_raw("CAP * NAK :We already exchanged capabilities");
+      // @TODO: support CAP after registration
+      // send_raw("CAP * NAK :We already exchanged capabilities");
       return;
     }
 
@@ -434,7 +438,7 @@ namespace irc {
     if (user.length() > 16) {
       const QString msg = QString("USER :Your user is too long (more than 16 characters)").arg(user);
       reply_num(461, msg.toUtf8());
-      m_socket->disconnectFromHost();
+      forceDisconnect();
       return;
     }
 
@@ -451,23 +455,34 @@ namespace irc {
     QReadLocker locker(&mtx_lock);
   }
 
-  void client_connection::self_message(const QByteArray& target, const QSharedPointer<QEventMessage> &message) {
-    if (capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE)) {
-      const QByteArray msg = ":" + prefix() + " PRIVMSG " + target + " :" + message->text + "\r\n";
-      emit sendData(msg);
-    }
-  }
+  void client_connection::message(const QSharedPointer<QEventMessage> &message) {
+    const bool cap_echo_message = capabilities.has(PROTOCOL_CAPABILITY::ECHO_MESSAGE);
+    const bool cap_self_message = capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE);
+    auto const &src = message->account;
+    QByteArray target;
+    if (message->channel.isNull())
+      target = message->dest->nick();
+    else
+      target = "#" + message->channel->name();
 
-  void client_connection::message(
-      const QSharedPointer<Account> &src,
-      const QByteArray& target,
-      const QSharedPointer<QEventMessage> &message
-  ) const {
+    QByteArray _prefix;
+    if (src == m_account) {
+      if (cap_echo_message)
+        _prefix = prefix();
+      else if (cap_self_message && m_uid != message->conn_id) {
+        _prefix = prefix();
+      } else {
+        return;
+      }
+    } else {
+      _prefix = src->prefix();
+    }
+
     const QByteArray tag_prefix = buildTagPrefix(message, src, capabilities);
 
     const QByteArray msg =
         tag_prefix +
-        ":" + src->prefix() +
+        ":" + _prefix +
         " PRIVMSG " + target +
         " :" + message->text + "\r\n";
 
@@ -654,6 +669,7 @@ namespace irc {
 
     auto msg = QSharedPointer<QEventMessage>(new QEventMessage);
     msg->account = m_account;
+    msg->conn_id = m_uid;
     msg->text = text;
     msg->from_system = false;
     msg->nick = _nick;
@@ -669,7 +685,7 @@ namespace irc {
       }
 
       msg->channel = chan_ptr;
-      chan_ptr->message(this, m_account, msg);
+      chan_ptr->message(this, msg);
     } else {
       const auto dest = g::ctx->irc_nick_get(target);
       if (dest.isNull()) {
@@ -678,7 +694,7 @@ namespace irc {
       }
 
       msg->dest = dest;
-      m_account->message(this, g::ctx->irc_nicks[target], msg);
+      m_account->message(this, msg);
     }
   }
 
@@ -698,7 +714,7 @@ namespace irc {
     //   ch->remove(m_account);
     //   m_server->removeChannelIfEmpty(ch);
     // }
-    m_socket->disconnectFromHost();
+    forceDisconnect();
   }
 
   void client_connection::handleRENAME(const QList<QByteArray> &args) {
@@ -754,6 +770,21 @@ namespace irc {
     rename->message = message;
     rename->channel = channel_from;
     Channel::rename(rename);
+  }
+
+  // @TODO: error replies
+  void client_connection::handleCHATHISTORY(const QList<QByteArray> &args) {
+    if (args.isEmpty() || args.size() <= 3)
+      return;
+
+    auto channel_name = args.at(1).mid(1);
+
+    auto chan_ptr = Channel::get(channel_name);
+    if (chan_ptr.isNull())
+      return;
+
+    send_raw("BATCH +123 chathistory #" + chan_ptr->name());
+    send_raw("BATCH -123");
   }
 
   void client_connection::handleNAMES(const QList<QByteArray> &args) {
@@ -890,7 +921,7 @@ namespace irc {
   }
 
   bool client_connection::change_nick(const QSharedPointer<QEventNickChange> &event) {
-    // 1. if we ourselves
+    // 1. if we are ourselves
     //   - first check if we even need to change nick
     //   - same connection? use local prefix
     //   - from another connection? does not matter.
@@ -993,12 +1024,12 @@ namespace irc {
     if (!server_password.isEmpty()) {
       if (m_passGiven.isEmpty()) {
         reply_num(464, "Password incorrect");
-        return m_socket->disconnectFromHost();
+        return forceDisconnect();
       }
 
       if (m_passGiven != server_password) {
         reply_num(464, "Password incorrect");
-        return m_socket->disconnectFromHost();
+        return forceDisconnect();
       }
     }
 
@@ -1052,7 +1083,7 @@ namespace irc {
   void client_connection::handleAUTHENTICATE(const QList<QByteArray> &args) {
     if (args.empty()) {
       send_raw("uwot?");
-      m_socket->disconnectFromHost();
+      forceDisconnect();
       return;
     }
 
@@ -1070,15 +1101,15 @@ namespace irc {
       return;
     }
 
-    const QByteArray& username = plain_spl.at(1);
-    const QByteArray& password = plain_spl.at(2);
+    const QByteArray& username = plain_spl.at(0);
+    const QByteArray& password = plain_spl.at(1);
 
     const auto account = Account::get_by_name(username);
     if (!account.isNull()) {
       auto auth = QSharedPointer<QEventAuthUser>(new QEventAuthUser);
       auth->username = username;
       auth->password = password;
-      auth->ip = m_socket->peerAddress().toString();
+      auth->ip = get_ip();
 
       auth = account->verifyPassword(auth);
       if (!auth->cancelled()) {
@@ -1099,11 +1130,17 @@ namespace irc {
         reply += ": " + auth->reason;
 
       reply_num(900, reply);
-      m_socket->disconnectFromHost();
+      forceDisconnect();
       return;
     }
 
     reply_num(900, "SASL authentication failed");
+    forceDisconnect();
+  }
+
+  void client_connection::forceDisconnect() const {
+    if (m_websocket != nullptr)
+      return m_websocket->close();
     m_socket->disconnectFromHost();
   }
 
@@ -1132,8 +1169,73 @@ namespace irc {
     send_raw("376 " + _nick + " :End of MOTD command.");
   }
 
-  void client_connection::handleWHO(const QList<QByteArray> &) {
-    // note, bot mode has different output: https://ircv3.net/specs/extensions/bot-mode
+  // note, bot mode has different output: https://ircv3.net/specs/extensions/bot-mode
+  void client_connection::handleWHO(const QList<QByteArray> &args) {
+    if (args.size() < 1) {
+      reply_num(461, "WHO :Not enough parameters");
+      return;
+    }
+
+    // keep original argument for replies
+    QByteArray raw_channel_arg = args[0];
+
+    // channel name without '#' for internal lookup
+    QByteArray channel_name = raw_channel_arg;
+    if (channel_name.startsWith('#')) {
+      channel_name = channel_name.mid(1);
+    }
+
+    auto chan_ptr = Channel::get(channel_name);
+    if (!chan_ptr) {
+      send_raw("401 " + nick() + " " + raw_channel_arg + " :No such nick/channel");
+      return;
+    }
+
+    // iterate over members
+    for (auto &acc : chan_ptr->members()) {
+      QByteArray _nick = acc->nick();
+
+      // host placeholder
+      QByteArray host = acc->host();
+      if (host.isEmpty()) host = g::defaultHost;
+
+      // ident
+      QByteArray ident = "~u";
+
+      // status: H (online), G (offline)
+      QByteArray status = acc->hasConnections() ? "H" : "G";
+      // operator or not
+      // @TODO: replace with actual permissions
+      if (acc->name() == "admin")
+        status += "@";
+
+      QByteArray hopcount = "0";
+      const QByteArray& realname = _nick;
+
+      // WHO line
+      QByteArrayList who_parts;
+      who_parts.append("354");
+      who_parts.append(nick());
+      who_parts.append(raw_channel_arg);
+      who_parts.append(ident);
+      who_parts.append(host);
+      who_parts.append(_nick);
+      who_parts.append(status);
+      who_parts.append(hopcount);
+      who_parts.append("*");
+      who_parts.append(realname);
+
+      // WHO numeric 354 with server prefix
+      send_raw(who_parts.join(" "));
+    }
+
+    // end of WHO list using QByteArrayList only
+    QByteArrayList end_parts;
+    end_parts.append("315");
+    end_parts.append(nick());
+    end_parts.append(raw_channel_arg);
+    end_parts.append(":End of WHO list");
+    send_raw(end_parts.join(" "));
   }
 
   void client_connection::handleWHOIS(const QList<QByteArray> &) {
@@ -1155,7 +1257,8 @@ namespace irc {
 
   void client_connection::onWrite(const QByteArray &data) const {
     if (m_websocket && m_websocket->isValid()) {
-      m_websocket->sendBinaryMessage(data);
+      qDebug() << ">" << data;
+      m_websocket->sendTextMessage(data);
       return;
     }
 
@@ -1205,15 +1308,20 @@ namespace irc {
   }
 
   void client_connection::disconnect() const {
-    m_socket->disconnectFromHost();
+    forceDisconnect();
   }
 
   void client_connection::parseIncomingWS(QByteArray line) {
+    qDebug() << line;
     return parseIncoming(line);
   }
 
   void client_connection::parseIncoming(QByteArray &line) {
-    if (!line.isEmpty() && g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::RAW_MSG)) {
+    line = line.trimmed();
+    if (line.isEmpty())
+      return;
+
+    if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::RAW_MSG)) {
       auto raw = QSharedPointer<QEventRawMessage>(new QEventRawMessage());
       raw->raw = line;
       raw->ip = m_remote.toString();
@@ -1261,6 +1369,8 @@ namespace irc {
       handleQUIT(parts);
     else if (cmd == "NAMES")
       handleNAMES(parts);
+    else if (cmd == "CHATHISTORY")
+      handleCHATHISTORY(parts);
     else if (cmd == "RENAME")
       handleRENAME(parts);
     else if (cmd == "TOPIC")
@@ -1269,6 +1379,8 @@ namespace irc {
       handleLUSERS(parts);
     else if (cmd == "MOTD")
       handleMOTD(parts);
+    else if (cmd == "WHO")
+      handleWHO(parts);
     else if (cmd == "AUTHENTICATE")
       handleAUTHENTICATE(parts);
     else if (cmd == "CAP")
@@ -1287,6 +1399,12 @@ namespace irc {
     if (!m_account.isNull())
       return m_account->nick();
     return m_nick.isEmpty() ? "*" : m_nick;
+  }
+
+  QString client_connection::get_ip() const {
+    if (m_websocket != nullptr)
+      return m_websocket->peerAddress().toString();
+    return m_socket->peerAddress().toString();
   }
 
   client_connection::~client_connection() {

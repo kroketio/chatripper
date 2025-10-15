@@ -63,7 +63,7 @@ void Snake::start() {
   PyThreadState *tstate = nullptr;
   const PyStatus status = Py_NewInterpreterFromConfig(&tstate, &config);
   if (PyStatus_Exception(status)) {
-    qWarning() << "Failed to create sub-interpreter:" << status.err_msg;
+    qFatal() << "Failed to create sub-interpreter:" << status.err_msg;
     emit started(false);
     return;
   }

@@ -47,6 +47,7 @@ class ChannelPart(QEventBase, QClass):
 @dataclass
 class Message(QEventBase, QClass):
     id: bytes
+    conn_id: bytes
     nick: str
     host: str
     text: str

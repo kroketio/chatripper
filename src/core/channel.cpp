@@ -215,7 +215,8 @@ QList<QByteArray> Channel::banList() const {
   return m_ban_masks.values();
 }
 
-void Channel::message(const irc::client_connection *from_conn, const QSharedPointer<Account> &from, QSharedPointer<QEventMessage> &message) {
+// @TODO: check if user is actually online, store stuff in db if not
+void Channel::message(const irc::client_connection *from_conn, QSharedPointer<QEventMessage> &message) {
   if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::CHANNEL_MSG)) {
     const auto result = g::ctx->snakepit->event(QEnums::QIRCEvent::CHANNEL_MSG, message);
 
@@ -228,20 +229,10 @@ void Channel::message(const irc::client_connection *from_conn, const QSharedPoin
     }
   }
 
-  // @TODO: check if user is actually online, store stuff in db if not
-
   QReadLocker locker(&mtx_lock);
   for (const auto&member: m_members) {
-    if (member != from) {
-      for (const auto& _conn: member->connections)
-        _conn->message(from, "#" + m_name, message);
-    } else {  // ourselves
-      for (const auto& _conn: from->connections) {
-        if (_conn != from_conn)
-          _conn->self_message("#" + m_name, message);  // ZNC_SELF_MESSAGE  @TODO: remove # nonsense
-        else
-          continue;  // @TODO: echo-message
-      }
+    for (const auto& _conn: member->connections) {
+      _conn->message(message);
     }
   }
 }

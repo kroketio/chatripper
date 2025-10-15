@@ -198,7 +198,7 @@ bool Account::setNick(const QSharedPointer<QEventNickChange> &event, bool broadc
   return true;
 }
 
-void Account::message(const irc::client_connection *conn, const QSharedPointer<Account> &dest, QSharedPointer<QEventMessage> &message) {
+void Account::message(const irc::client_connection *conn, QSharedPointer<QEventMessage> &message) {
   // @TODO: deal with history when we are offline
 
   if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::PRIVATE_MSG)) {
@@ -213,19 +213,13 @@ void Account::message(const irc::client_connection *conn, const QSharedPointer<A
     }
   }
 
-  const auto self = get_by_uid(m_uid);
-  if (self.isNull())
-    return;
-
   QReadLocker locker(&mtx_lock);
-  for (const auto& _conn: dest->connections)
-    _conn->message(self, m_nick, message);
+  for (const auto& _conn: message->dest->connections)
+    _conn->message(message);
 
   // send to ourselves (other connected clients)
   for (const auto& _conn: connections) {
-    if (conn == _conn || self == dest)
-      continue;
-    _conn->self_message(dest->nick(), message);
+    _conn->message(message);
   }
 }
 

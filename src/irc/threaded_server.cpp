@@ -37,9 +37,9 @@ namespace irc {
     capabilities << "chghost";
     capabilities << "account-tag";
     capabilities << "account-notify";
-    // capabilities << "echo-message"; // @TODO implement
+    capabilities << "echo-message";
     capabilities << "znc.in/self-message";
-    capabilities << "fish";
+    // capabilities << "fish";
     capabilities << "sasl";
     capabilities << "draft/channel-rename";
 
