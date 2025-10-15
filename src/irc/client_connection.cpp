@@ -45,9 +45,7 @@ namespace irc {
 
     m_websocket = socket;
     connect(m_websocket, &QWebSocket::binaryMessageReceived, this, &client_connection::parseIncomingWS);
-    connect(m_websocket, &QWebSocket::textMessageReceived, [=](const QString& text) {
-      this->parseIncomingWS(text.toUtf8());  // in case web clients send text
-    });
+    connect(m_websocket, &QWebSocket::textMessageReceived, [=](const QString& text) { this->parseIncomingWS(text.toUtf8()); });
   }
 
   client_connection::client_connection(
@@ -875,14 +873,29 @@ namespace irc {
   }
 
   void client_connection::handleLUSERS(const QList<QByteArray> &args) {
-    // int users = 0;
-    // for (auto *c: m_server->clients())
-    //   ++users;
-    //
-    // replyNumeric(251, nick, "There are " + QByteArray::number(users) + " users and 0 services on 1 servers");
-    // replyNumeric(255, nick,
-    //   "I have " + QByteArray::number(users) + " clients and " + QByteArray::number(m_server->channels().size())
-    //   + " channels");
+    QReadLocker rlock(&g::ctx->mtx_cache);
+    unsigned int count_users = g::ctx->accounts.size();
+    rlock.unlock();
+    unsigned int count_peers = m_server->concurrent_peers();
+
+    // LUSERS 251
+    QByteArrayList msg_251;
+    msg_251 << "251";
+    msg_251 << nick();
+    msg_251 << "There are";
+    msg_251 << QByteArray::number(count_users) << "users,";
+    msg_251 << QByteArray::number(count_peers) << "connected peers,";
+    msg_251 << "and 0 services on 1 server(s)\r\n";
+    send_raw(msg_251.join(" "));
+
+    // LUSERS 252
+    QByteArrayList msg_252;
+    msg_252 << "252";
+    msg_252 << nick();
+    msg_252 << "I have";
+    msg_252 << QByteArray::number(count_users) << "users,";
+    msg_252 << QByteArray::number(count_peers) << "connected peers";
+    send_raw(msg_252.join(" "));
   }
 
   void client_connection::change_host(const QByteArray &new_host) {
@@ -1355,37 +1368,37 @@ namespace irc {
       handlePING(parts);
     else if (cmd == "PONG")
       handlePONG(parts);
-    else if (cmd == "JOIN") {
+    else if (cmd == "JOIN" && is_ready) {
       if (parts.at(0) == ":" && parts.size() == 1)
         // replyNumeric(421, m_nick.isEmpty() ? QByteArray("*") : m_nick, "Unknown JOIN command");
           return;
       handleJOIN(parts);
     }
-    else if (cmd == "PART")
+    else if (cmd == "PART" && is_ready)
       handlePART(parts);
-    else if (cmd == "PRIVMSG")
+    else if (cmd == "PRIVMSG" && is_ready)
       handlePRIVMSG(parts);
     else if (cmd == "QUIT")
       handleQUIT(parts);
-    else if (cmd == "NAMES")
+    else if (cmd == "NAMES" && is_ready)
       handleNAMES(parts);
-    else if (cmd == "CHATHISTORY")
+    else if (cmd == "CHATHISTORY" && is_ready)
       handleCHATHISTORY(parts);
-    else if (cmd == "RENAME")
+    else if (cmd == "RENAME" && is_ready)
       handleRENAME(parts);
-    else if (cmd == "TOPIC")
+    else if (cmd == "TOPIC" && is_ready)
       handleTOPIC(parts);
-    else if (cmd == "LUSERS")
+    else if (cmd == "LUSERS" && is_ready)
       handleLUSERS(parts);
     else if (cmd == "MOTD")
       handleMOTD(parts);
-    else if (cmd == "WHO")
+    else if (cmd == "WHO" && is_ready)
       handleWHO(parts);
     else if (cmd == "AUTHENTICATE")
       handleAUTHENTICATE(parts);
     else if (cmd == "CAP")
       handleCAP(parts);
-    else if (cmd == "MODE")
+    else if (cmd == "MODE" && is_ready)
       handleMODE(parts);
     else {
       return;

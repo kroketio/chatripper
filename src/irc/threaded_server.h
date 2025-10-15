@@ -27,6 +27,8 @@ namespace irc {
     QByteArray motd();
     QStringList capabilities;
 
+    unsigned int concurrent_peers();
+
     QHash<uint32_t,int> activeConnections;
     QMutex activeConnectionsMutex;
 

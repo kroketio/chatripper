@@ -169,6 +169,16 @@ namespace irc {
     g::irc_motd_last_modified = lastModified;
   }
 
+  unsigned int ThreadedServer::concurrent_peers() {
+    unsigned int peers = 0;
+    for (const auto&worker: m_workers) {
+      QReadLocker rlock(&worker->mtx_lock);
+      peers += worker->connections.size();
+      rlock.unlock();
+    }
+    return peers;
+  }
+
   ThreadedServer::~ThreadedServer() {
     for (QThread* thread: m_thread_pool) {
       thread->quit();
