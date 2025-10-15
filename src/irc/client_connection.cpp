@@ -237,6 +237,22 @@ namespace irc {
 
     // --- MODE <target> <modes...> (change request) ---
     QByteArray requested_modes = args.at(1);
+
+    // --- case: MODE #channel b (ban list query) ---
+    if (target.startsWith('#') && requested_modes == "b") {
+      const auto channel = Channel::get(target.mid(1));
+      if (!channel)
+        return reply_num(403, target + " :No such channel");
+
+      // send ban list
+      const auto bans = channel->banList(); // assume Channel has banList()
+      // for (const auto &ban : bans) {
+      //   send_raw("367 " + _nick + " #" + channel->name() + " " + ban.mask + " " + ban.set_by + " " + QByteArray::number(ban.timestamp));
+      // }
+      send_raw("368 " + _nick + " #" + channel->name() + " :End of Channel Ban List");
+      return;
+    }
+
     if (requested_modes.isEmpty() || (requested_modes[0] != '+' && requested_modes[0] != '-'))
       return reply_num(501, "Unknown MODE flag");
 
