@@ -1,2 +1,2 @@
-Hi, welcome to cIRCa
+Hi, welcome to chatripper
 Change this MOTD if you like!

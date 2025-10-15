@@ -1,6 +1,6 @@
 # Modules
 
-cIRCa has the Python interpreter embedded. It hooks into the server, and at 
+chatripper has the Python interpreter embedded. It hooks into the server, and at 
 various stages of execution it emits events to the Python runtime where you 
 can act on them.
 
@@ -63,7 +63,7 @@ All events have the `.cancel(message: str)` method, in case you want to cancel t
 
 ### Raw Message (incoming)
 
-This runs early - before cIRCa has started parsing the IRC line.
+This runs early - before chatripper has started parsing the IRC line.
 
 ```python3
 @qirc.on(QIRCEvent.RAW_MSG)
@@ -178,10 +178,10 @@ def max_conns_handler(self, ev: PeerMaxConnections) -> PeerMaxConnections:
 
 # Concurrency
 
-cIRCa runs `x` independent Python interpreters in a thread pool, each with its own Global Interpreter Lock (GIL), as described in [PEP 684](https://peps.python.org/pep-0684/).
+chatripper runs `x` independent Python interpreters in a thread pool, each with its own Global Interpreter Lock (GIL), as described in [PEP 684](https://peps.python.org/pep-0684/).
 
 Because each interpreter is isolated, your module is loaded separately
-into every instance. cIRCa automatically selects which interpreter to use for each call (currently via round-robin).
+into every instance. chatripper automatically selects which interpreter to use for each call (currently via round-robin).
 
 # Performance
 

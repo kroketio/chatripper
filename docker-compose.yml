@@ -1,5 +1,5 @@
 services:
-  circa:
+  chatripper:
     build: .
     ports:
       - "6667:6667"
@@ -8,7 +8,7 @@ services:
       - foo=bar
     volumes:
       - .:/app
-      - circa-ccache:/ccache
+      - chatripper-ccache:/ccache
 
 volumes:
-  circa-ccache:
+  chatripper-ccache:

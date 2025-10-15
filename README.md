@@ -1,4 +1,4 @@
-# cIRCa
+# chatripper
 
 Fast, self-hosted, highly scriptable chat platform for team communications.
 
@@ -6,7 +6,7 @@ Fast, self-hosted, highly scriptable chat platform for team communications.
 
 ### Design philosophy
 
-cIRCa is based on IRC. Read [more here](docs/design.md).
+chatripper is based on IRC. Read [more here](docs/design.md).
 
 ## Features
 
@@ -24,36 +24,13 @@ cIRCa is based on IRC. Read [more here](docs/design.md).
 
 Change messages in transit, modify/add IRCv3 message tags, and more.
 
-```python3
-from qircd import *
-
-class MyModule(QIRCModule):
-    def __init__(self):
-        super().__init__()
-
-    @qirc.on(QIRCEvent.CHANNEL_MSG)
-    def channel_message_handler(self, msg: Message) -> Message:
-        print(f"new message in {msg.channel.name}")
-
-        if msg.account.name == "sander":
-            # messages from `sander` are always uppercase now
-            msg.text = msg.text.upper()
-
-        # all channel messages get this tag attached
-        msg.tags["example-tag"] = "example-value"
-        return msg
-
-my_mod = MyModule()
-qirc.register_module(my_mod)
-```
-
 More info [docs/modules.md](docs/modules.md)
 
 ## Quick start guide
 
 ```bash
 docker compose build --no-cache
-docker compose run --rm circa
+docker compose run --rm chatripper
 ```
 
 Visit the web-interface over at [http://127.0.0.1:3000](http://127.0.0.1:3000).
@@ -66,10 +43,9 @@ For more information about Docker: [docs/docker.md](docs/docker.md)
 
 ## Performance
 
-cIRCa is designed to operate primarily in memory. It is both multithreaded and
-asynchronous. It can handle thousands of concurrent connections. I/O operations are
-queued whenever possible, and concurrency is prioritized to deliver a fast, responsive chat
-experience - low-powered hardware included.
+Chatripper is a fast chat system that handles thousands of connections concurrently, even on low-powered hardware.
+
+[docs/architecture.md](docs/architecture.md).
 
 ## Testimonials
 

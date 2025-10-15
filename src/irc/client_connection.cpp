@@ -1085,7 +1085,7 @@ namespace irc {
     g::ctx->irc_nicks_insert_cache(_nick, m_account);
 
     reply_num(1, "Hi, welcome to IRC");
-    reply_num(2, "Your host is " + ThreadedServer::serverName() + ", running version cIRCa-0.1");
+    reply_num(2, "Your host is " + ThreadedServer::serverName() + ", running version chatripper-0.1");
     reply_num(3, "This server was created Dec 21 1989 at 13:37:00 (lie)");
     reply_num(4, ThreadedServer::serverName() + " wut-7.2.2+bla.7.3 what is this.");
 

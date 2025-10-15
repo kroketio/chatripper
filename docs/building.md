@@ -6,7 +6,7 @@
 
 ### Requirements
 
-cIRCa runs exclusively on Linux. On an Ubuntu based system, the system dependencies 
+chatripper runs exclusively on Linux. On an Ubuntu based system, the system dependencies 
 you can install are:
 
 ```bash
@@ -37,7 +37,7 @@ sudo make -Cbuild -j4 install
 
 ### Compilation
 
-Using CMake we'll do an out-of-tree build. Move to the cIRCa root directory and:
+Using CMake we'll do an out-of-tree build. Move to the chatripper root directory and:
 
 ```bash
 cmake -Bbuild .
@@ -58,4 +58,4 @@ make -Cbuild -j6
 
 ### Running
 
-The `cIRCa` executable will be placed in `build/bin/`
+The `chatripper` executable will be placed in `build/bin/`

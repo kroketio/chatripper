@@ -1,7 +1,7 @@
 # Design, motivations, goals
 
-cIRCa is a chat platform developed on top of IRC. We found 
-ways to extend, and improve this [old protocol](https://en.wikipedia.org/wiki/IRC) 
+chatripper is a chat platform developed on top of IRC. We found 
+ways to extend, and improve this [protocol](https://en.wikipedia.org/wiki/IRC) 
 in favor of allowing more modern features whilst keeping it backward 
 compatible with IRC, and IRCv3 clients.
 
@@ -9,15 +9,7 @@ compatible with IRC, and IRCv3 clients.
 
 While many existing, centralized chat services provide a modern chat experience, 
 self-hosted alternatives like XMPP, Matrix, and others fail to replicate a similar user 
-experience effectively. 
-
-Some options suffer from one, or a combination of the following issues: 
-
-- Resource hungry, and buckles under light usage (>100 concurrent connections)
-- Poor on-boarding, and overall UX
-- Time-consuming to install, and configure
-- Heavy/bloated protocol
-- Poor choice of server technology
+experience effectively.
 
 ## Goals
 
@@ -46,19 +38,12 @@ tools (shoutout to `ngrep -dlo -qt -W byline port 6667`), and the protocol
 is well understood. Other protocols are more complicated, therefor requiring 
 more implementation effort. 
 
-The issue however; IRC (and [IRCv3](https://ircv3.net/)) are *not really* suited for the goals 
+IRC (and [IRCv3](https://ircv3.net/)) are *not really* suited for the goals 
 outlined above. While IRCv3 is a move in the right direction, the protocol would 
-not meet user expectations (see [Mastodon thread](https://web.archive.org/web/20230418155309mp_/https://social.treehouse.systems/@ariadne/110199104168870444)).
-
-If we picked Matrix, or XMPP, and tried to make a server, it 
-would take a great amount of time. We already know we want to implement 
-custom features, and that would require a (deep) understanding of the protocol in 
-question, which can be quite a bit to absorb. We also need to create a custom 
-client to test all these custom server features, again costing time.
-
-IRC's simplicity negates the fact that this protocol was not designed for 
-our goals. We'll simply add protocol features (specifications) as we go, 
-in a timely manner.
+not meet user expectations (see [Mastodon thread](https://web.archive.org/web/20230418155309mp_/https://social.treehouse.systems/@ariadne/110199104168870444)). However, the good 
+news is that IRC's simplicity negates the fact that this protocol was 
+not designed for our goals. We can simply add protocol features 
+(specifications) as we go, in a timely manner.
 
 ## Our strategy
 
@@ -74,9 +59,9 @@ We have adopted the following strategy:
 
 #### Users
 
-cIRCa aims to be usable for regular, casual internet users. We believe many 
+chatripper aims to be usable for regular, casual internet users. We believe many 
 self-hosted chat platforms, and protocols are practically 
-only usable for computer-literate people. cIRCa will be different - it 
+only usable for computer-literate people. chatripper will be different - it 
 will be for everyone.
 
 #### Operations
@@ -85,7 +70,7 @@ We aim to provide a headache-free hosting experience. You turn it on, and It Jus
 
 We will provide a Docker compose that will:
 
-1. One-shot install/run cIRCa
+1. Run chatripper
 2. Not require you to set up TLS certificates, or DNS records
 3. Not require you to mess around in +1000 line YAML files (or other types of config files)
 

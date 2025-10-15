@@ -12,7 +12,7 @@
 #include <QVariant>
 
 #include "ctx.h"
-#include "config-circa.h"
+#include "config-chatripper.h"
 #include "lib/utils.h"
 #include "lib/logger_std/logger_std.h"
 #include "python/type_registry.h"
@@ -33,7 +33,7 @@ static PyMethodDef SnakeMethods[] = {
     {"get_channels", py_get_channels, METH_VARARGS, "Get channels by UUIDs"},
     {"is_debug", py_is_debug, METH_NOARGS, "Returns True if compiled in debug mode"},
     {"interpreter_idx", py_interpreter_idx, METH_NOARGS, "Returns the Snake interpreter index"},
-    {"version", py_version, METH_NOARGS, "Returns cIRCa version"},
+    {"version", py_version, METH_NOARGS, "Returns chatripper version"},
     {nullptr, nullptr, 0, nullptr} // sentinel
 };
 

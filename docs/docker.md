@@ -17,5 +17,5 @@ docker compose build --no-cache
 ### Running
 
 ```bash
-docker compose run --rm circa
+docker compose run --rm chatripper
 ```

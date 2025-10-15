@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
-project(circa
+project(chatripper
     VERSION "0.0.1"
-    DESCRIPTION "circa"
+    DESCRIPTION "chatripper"
     LANGUAGES CXX C
 )
 
@@ -22,7 +22,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FindCcache)
 
-configure_file("cmake/config-circa.h.cmake" "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/config-circa.h")
+configure_file("cmake/config-chatripper.h.cmake" "${CMAKE_CURRENT_SOURCE_DIR}/src/lib/config-chatripper.h")
 
 # https://github.com/kroketio/libminisign
 find_package(minisign REQUIRED)
@@ -58,12 +58,12 @@ file(GLOB SOURCE_FILES
 
 add_subdirectory(src/lib/logger_std)
 
-add_executable(circa
+add_executable(chatripper
     ${SOURCE_FILES}
 )
 
 if(ENABLE_DEBUG_TIMINGS)
-    target_compile_definitions(circa
+    target_compile_definitions(chatripper
         PUBLIC
         ENABLE_DEBUG_TIMINGS=1
     )
@@ -71,15 +71,15 @@ endif()
 
 if(DEBUG)
     message(STATUS "DEBUG BUILD")
-    target_compile_definitions(circa PRIVATE DEBUG=1)
+    target_compile_definitions(chatripper PRIVATE DEBUG=1)
 endif()
 
-target_include_directories(circa PRIVATE
+target_include_directories(chatripper PRIVATE
     src
     src/lib
     ${RapidJSON_INCLUDE_DIRS})
 
-target_link_libraries(circa PRIVATE
+target_link_libraries(chatripper PRIVATE
     Qt6::Core
     Qt6::Network
     Qt6::Gui
@@ -91,7 +91,7 @@ target_link_libraries(circa PRIVATE
     minisign::minisign
 )
 
-set_target_properties(circa PROPERTIES
+set_target_properties(chatripper PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     LINK_FLAGS_RELEASE -s
 )

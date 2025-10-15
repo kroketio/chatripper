@@ -32,4 +32,4 @@ RUN git clone https://github.com/kroketio/libminisign.git /tmp/libminisign \
 
 WORKDIR /app
 
-ENTRYPOINT ["bash", "-c", "cmake -Bbuild -DCMAKE_PREFIX_PATH=/opt/qt/6.9.1/gcc_64/ . && make -Cbuild -j$(nproc) && ./build/bin/circa"]
+ENTRYPOINT ["bash", "-c", "cmake -Bbuild -DCMAKE_PREFIX_PATH=/opt/qt/6.9.1/gcc_64/ . && make -Cbuild -j$(nproc) && ./build/bin/chatripper"]
