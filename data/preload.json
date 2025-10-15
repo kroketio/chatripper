@@ -7,7 +7,7 @@
   "users": [
     {
       "name": "dsc",
-      "password": "pass",
+      "password": "dsc",
       "server": "master"
     }
   ],

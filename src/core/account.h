@@ -16,6 +16,7 @@
 
 #include "lib/globals.h"
 #include "core/qtypes.h"
+#include "core/metadata.h"
 #include "irc/client_connection.h"
 
 class Channel;
@@ -113,6 +114,13 @@ public:
 
   mutable QReadWriteLock mtx_lock;
 
+  QSharedPointer<Metadata> metadata() {
+    if (m_metadata.isNull())
+      m_metadata = QSharedPointer<Metadata>::create(this);
+    return m_metadata;
+  }
+
+
 signals:
   void nickChanged(const QByteArray& old_nick, const QByteArray& new_nick);
 private:
@@ -122,6 +130,8 @@ private:
   QByteArray m_nick;
   QByteArray m_password;
   QByteArray m_host;
+
+  QSharedPointer<Metadata> m_metadata;
 
 public:
   QVariantMap to_variantmap() const;

@@ -174,6 +174,45 @@ namespace irc {
     }
   }
 
+  void client_connection::handleMETADATA(QMap<QString, QVariant> &tags, const QList<QByteArray> &args) {
+    if (args.size() < 2) {
+      reply_num(461, "METADATA :Not enough parameters");
+      return;
+    }
+
+    const QByteArray target = args[0];
+    const QByteArray subcmd = args[1];
+    QList<QByteArray> sub_args = args.mid(2);
+
+    auto event = QSharedPointer<QEventMetadata>::create();
+    event->account = m_account;
+    event->subcmd = subcmd;
+    event->args = sub_args;
+
+    if (target.startsWith('#')) {
+      auto chan = Channel::get(target.mid(1));
+      if (chan.isNull()) {
+        send_raw("401 " + nick() + " " + target + " :No such nick/channel");
+        return;
+      }
+      event->setChannel(chan.staticCast<QObject>());
+      chan->metadata()->handle(event);
+    } else if (target == "*" || target == m_account->nick()) {
+      event->setDest(m_account.staticCast<QObject>());
+      m_account->metadata()->handle(event);
+    } else {
+      const auto acc = Account::get_by_name(target);
+      if (acc.isNull()) {
+        send_raw("401 " + nick() + " " + target + " :No such nick/channel");
+        return;
+      }
+      event->setDest(acc.staticCast<QObject>());
+      acc->metadata()->handle(event);
+    }
+
+    metadata(event);
+  }
+
   void client_connection::handleMODE(const QList<QByteArray> &args) {
     if (args.size() == 0)
       return;
@@ -469,6 +508,69 @@ namespace irc {
 
   void client_connection::channel_send_topic(const QByteArray &channel_name, const QByteArray &topic) {
     QReadLocker locker(&mtx_lock);
+  }
+
+  void client_connection::metadata(const QSharedPointer<QEventMetadata> &event) {
+    QByteArrayList msg;
+
+    const QByteArray targetName =
+      event->isAccount()
+      ? event->dest->nick()
+      : event->isChannel()
+        ? "#" + event->channel->name()
+        : "*";
+
+    // error handling
+    if (!event->error_code.isEmpty()) {
+      msg.clear();
+      msg << ":" + prefix();
+      msg << "FAIL METADATA " + event->error_code;
+      msg << targetName;
+      msg << event->error_key;
+      msg << ":You do not have permission to modify metadata\r\n";
+      emit sendData(msg.join(" "));
+      return;
+    }
+
+    // send metadata key/value pairs
+    for (auto it = event->metadata.constBegin(); it != event->metadata.constEnd(); ++it) {
+      QByteArray key = it.key().toUtf8();
+      if (key.startsWith("__")) continue; // internal keys
+
+      QByteArray value = it.value().toString().toUtf8();
+
+      msg.clear();
+      msg << ":" + prefix();
+      msg << "761" << nick();
+      msg << targetName;
+      msg << key << "*"
+          << ":" + value + "\r\n";
+
+      emit sendData(msg.join(" "));
+    }
+
+    // end of metadata
+    msg.clear();
+    msg << ":" + prefix();
+    msg << "762" << nick();
+    msg << targetName << ":End of metadata\r\n";
+    emit sendData(msg.join(" "));
+
+    // handle subscriptions
+    for (auto it = event->subscriptions.constBegin(); it != event->subscriptions.constEnd(); ++it) {
+      QList<QByteArray> keys;
+      for (const auto &a : it.value())
+        keys << a->nick();
+
+      if (!keys.isEmpty()) {
+        msg.clear();
+        msg << ":" + prefix();
+        msg << "770" << nick();
+        msg << it.key().toUtf8();
+        msg << keys.join(" ");
+        emit sendData(msg.join(" "));
+      }
+    }
   }
 
   void client_connection::message(const QSharedPointer<QEventMessage> &message) {
@@ -805,7 +907,6 @@ namespace irc {
       msg << "#" + from_channel;
       msg << "#" + to_channel;
       msg << ":Channel to rename does not exist\r\n";
-
       emit sendData(msg.join(" "));
       return;
     }
@@ -818,7 +919,6 @@ namespace irc {
       msg << "#" + from_channel;
       msg << "#" + to_channel;
       msg << ":Channel already exists\r\n";
-
       emit sendData(msg.join(" "));
       return;
     }
@@ -1479,6 +1579,8 @@ namespace irc {
       handleCHATHISTORY(parts);
     else if (cmd == "RENAME" && is_ready)
       handleRENAME(parts);
+    else if (cmd == "METADATA" && is_ready)
+      handleMETADATA(tags, parts);
     else if (cmd == "TOPIC" && is_ready)
       handleTOPIC(parts);
     else if (cmd == "LUSERS" && is_ready)

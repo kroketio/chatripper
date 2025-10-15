@@ -33,7 +33,9 @@ docker compose build --no-cache
 docker compose run --rm chatripper
 ```
 
-Visit the web-interface over at [http://127.0.0.1:3000](http://127.0.0.1:3000).
+- IRC port: 6667
+- Websocket port: 8200
+- web-interface: 3000
 
 For more information about Docker: [docs/docker.md](docs/docker.md)
 

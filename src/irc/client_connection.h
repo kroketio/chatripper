@@ -105,6 +105,7 @@ namespace irc {
     bool change_nick(const QSharedPointer<QEventNickChange> &event);
 
     void message(const QSharedPointer<QEventMessage> &message);
+    void metadata(const QSharedPointer<QEventMetadata> &event);
 
     void change_host(const QSharedPointer<Account> &acc, const QByteArray &new_host);
     void change_host(const QByteArray &new_host);
@@ -145,6 +146,7 @@ namespace irc {
     void handleCHATHISTORY(const QList<QByteArray> &args);
     void handlePRIVMSG(QMap<QString, QVariant>& tags, const QList<QByteArray> &args);
     void handleTAGMSG(QMap<QString, QVariant>& tags, const QList<QByteArray> &args);
+    void handleMETADATA(QMap<QString, QVariant>& tags, const QList<QByteArray> &args);
     void handleQUIT(const QList<QByteArray> &args);
     void handleNAMES(const QList<QByteArray> &args);
     void handleTOPIC(const QList<QByteArray> &args);

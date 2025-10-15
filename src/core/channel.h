@@ -8,6 +8,7 @@
 
 #include "utils.h"
 #include "core/account.h"
+#include "core/metadata.h"
 #include "irc/client_connection.h"
 #include "irc/modes.h"
 
@@ -38,6 +39,8 @@ public:
     const QSharedPointer<Server> &server,  // Server before creation
     const QDateTime &creation
   );
+
+  mutable QReadWriteLock mtx_lock;
 
   [[nodiscard]] bool has(const QByteArray &account_name) const;
   // void join(const QByteArray &account_name);
@@ -82,6 +85,12 @@ public:
   QByteArray uid_str;
   QDateTime date_creation;
 
+  QSharedPointer<Metadata> metadata() {
+    if (m_metadata.isNull())
+      m_metadata = QSharedPointer<Metadata>::create(this);
+    return m_metadata;
+  }
+
 signals:
   void topicChanged(const QByteArray &newTopic);
   void keyChanged(const QByteArray &newKey);
@@ -91,7 +100,6 @@ signals:
   void memberRemoved(const QSharedPointer<Account> &account);
 
 private:
-  mutable QReadWriteLock mtx_lock;
   QByteArray m_name;
   QByteArray m_topic;
   QByteArray m_key;
@@ -102,6 +110,8 @@ private:
   // bans
   QSet<QByteArray> m_ban_masks;
   int m_limit = 0;
+
+  QSharedPointer<Metadata> m_metadata;
 
 public:
   QVariantMap to_variantmap() {

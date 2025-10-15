@@ -102,3 +102,29 @@ QSharedPointer<QObject> QEventMessageTags::getAccount() const {
 void QEventMessageTags::setAccount(const QSharedPointer<QObject>& a) {
   account = qSharedPointerCast<Account>(a);
 }
+
+// QEventMetadata.cpp
+
+QSharedPointer<QObject> QEventMetadata::getAccount() const {
+  return qSharedPointerCast<QObject>(account);
+}
+
+void QEventMetadata::setAccount(const QSharedPointer<QObject>& a) {
+  account = qSharedPointerCast<Account>(a);
+}
+
+QSharedPointer<QObject> QEventMetadata::getDest() const {
+  return qSharedPointerCast<QObject>(dest);
+}
+
+void QEventMetadata::setDest(const QSharedPointer<QObject>& d) {
+  dest = qSharedPointerCast<Account>(d);
+}
+
+QSharedPointer<QObject> QEventMetadata::getChannel() const {
+  return qSharedPointerCast<QObject>(channel);
+}
+
+void QEventMetadata::setChannel(const QSharedPointer<QObject>& c) {
+  channel = qSharedPointerCast<Channel>(c);
+}

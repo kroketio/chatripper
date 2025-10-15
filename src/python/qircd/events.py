@@ -62,6 +62,20 @@ class Message(QEventBase, QClass):
     tag_msg: bool = False
 
 @dataclass
+class Metadata(QEventBase, QClass):
+    subcmd: str
+    error_code: bytes
+    error_target: bytes
+    error_key: bytes
+    account: Account = None
+    dest: Account = None
+    channel: Channel = None
+    args: List[str] = field(default_factory=list)
+    metadata: Dict[str,Any] = field(default_factory=dict)
+    from_system: bool = False
+    subscriptions: Dict[str,Account] = field(default_factory=dict)
+
+@dataclass
 class MessageTags(QEventBase, QClass):
     line: bytes
     account: Account = None

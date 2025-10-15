@@ -205,6 +205,64 @@ public:
   void setDest(const QSharedPointer<QObject>& a);
 };
 
+class QEventMetadata final : public QEventBase {
+  Q_GADGET
+  Q_PROPERTY(QSharedPointer<QObject> account READ getAccount WRITE setAccount)
+  Q_PROPERTY(QSharedPointer<QObject> dest READ getDest WRITE setDest)
+  Q_PROPERTY(QSharedPointer<QObject> channel READ getChannel WRITE setChannel)
+  Q_PROPERTY(QByteArray subcmd MEMBER subcmd)
+  Q_PROPERTY(QList<QByteArray> args MEMBER args)
+  Q_PROPERTY(QMap<QString, QVariant> metadata MEMBER metadata)
+  Q_PROPERTY(bool from_system MEMBER from_system)
+  Q_PROPERTY(QByteArray error_code MEMBER error_code)
+  Q_PROPERTY(QByteArray error_target MEMBER error_target)
+  Q_PROPERTY(QByteArray error_key MEMBER error_key)
+  Q_PROPERTY(QMap<QString, QSet<QSharedPointer<Account>>> subscriptions MEMBER subscriptions)
+
+public:
+  // t:Account d:None
+  QSharedPointer<Account> account;
+  // t:Account d:None
+  QSharedPointer<Account> dest;
+  // t:Channel d:None
+  QSharedPointer<Channel> channel;
+
+  // t:str
+  QByteArray subcmd;
+
+  // t: List[str] d:field(default_factory=list)
+  QList<QByteArray> args;
+
+  // t:Dict[str,Any] d:field(default_factory=dict)
+  QMap<QString, QVariant> metadata;
+
+  // t:bool d:False
+  bool from_system = false;
+
+  // error info
+  QByteArray error_code;
+  QByteArray error_target;
+  QByteArray error_key;
+
+  // t:Dict[str,Account] d:field(default_factory=dict)
+  QMap<QString, QSet<QSharedPointer<Account>>> subscriptions;
+
+  // Accessors using QObject for Q_PROPERTY compatibility
+  QSharedPointer<QObject> getAccount() const;
+  void setAccount(const QSharedPointer<QObject>& a);
+
+  QSharedPointer<QObject> getDest() const;
+  void setDest(const QSharedPointer<QObject>& d);
+
+  QSharedPointer<QObject> getChannel() const;
+  void setChannel(const QSharedPointer<QObject>& c);
+
+  QEventMetadata() = default;
+
+  bool isChannel() const { return !channel.isNull(); }
+  bool isAccount() const { return !dest.isNull(); }
+};
+
 class QEventMessageTags final : public QEventBase {
   Q_GADGET
   Q_PROPERTY(QSharedPointer<QObject> account READ getAccount WRITE setAccount)
@@ -297,3 +355,4 @@ Q_DECLARE_METATYPE(QSharedPointer<QEventChannelPart>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventNickChange>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventChannelRename>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventMessageTags>)
+Q_DECLARE_METATYPE(QSharedPointer<QEventMetadata>)

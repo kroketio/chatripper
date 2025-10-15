@@ -31,6 +31,8 @@ namespace irc {
       throw std::runtime_error("thread count cannot be 0");
 
     // @TODO: replace with enums
+    capabilities << "draft/metadata";
+    capabilities << "draft/metadata-2";
     capabilities << "message-tags";
     capabilities << "multi-prefix";
     capabilities << "extended-join";
