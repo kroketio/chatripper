@@ -1130,8 +1130,8 @@ namespace irc {
       return;
     }
 
-    const QByteArray& username = plain_spl.at(0);
-    const QByteArray& password = plain_spl.at(1);
+    const QByteArray& username = plain_spl.at(1);
+    const QByteArray& password = plain_spl.at(2);
 
     const auto account = Account::get_by_name(username);
     if (!account.isNull()) {
