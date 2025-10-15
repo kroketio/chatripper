@@ -216,9 +216,13 @@ QList<QByteArray> Channel::banList() const {
 }
 
 // @TODO: check if user is actually online, store stuff in db if not
-void Channel::message(const irc::client_connection *from_conn, QSharedPointer<QEventMessage> &message) {
-  if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::CHANNEL_MSG)) {
-    const auto result = g::ctx->snakepit->event(QEnums::QIRCEvent::CHANNEL_MSG, message);
+void Channel::message(QSharedPointer<QEventMessage> &message) {
+  auto ev_type = QEnums::QIRCEvent::CHANNEL_MSG;
+  if (message->tag_msg)
+    ev_type = QEnums::QIRCEvent::TAG_MSG;
+
+  if (g::ctx->snakepit->hasEventHandler(ev_type)) {
+    const auto result = g::ctx->snakepit->event(ev_type, message);
 
     if (result.canConvert<QSharedPointer<QEventMessage>>()) {
       const auto resPtr = result.value<QSharedPointer<QEventMessage>>();

@@ -35,9 +35,9 @@ namespace irc {
     return escaped;
   }
 
-  QByteArray buildTagPrefix(const QSharedPointer<QEventMessage> &message,
-                            const QSharedPointer<Account> &src,
-                            const Flags<PROTOCOL_CAPABILITY> &capabilities) {
+  QByteArray buildMessageTags(const QSharedPointer<QEventMessage> &message,
+                              const QSharedPointer<Account> &src,
+                              const Flags<PROTOCOL_CAPABILITY> &capabilities) {
     if (!capabilities.has(PROTOCOL_CAPABILITY::MESSAGE_TAGS))
       return {};
 
@@ -70,6 +70,81 @@ namespace irc {
       tag_prefix.truncate(max_tag_data + 2);
 
     return tag_prefix;
+  }
+
+  QMap<QString, QVariant> parseMessageTags(const QByteArray &line, int &tagsEndPos) {
+    QMap<QString, QVariant> tags;
+    tagsEndPos = -1; // default: no tags found
+
+    if (!line.startsWith('@'))
+      return tags;
+
+    // find the end of the tags block (first space)
+    const int spaceIdx = line.indexOf(' ');
+    if (spaceIdx == -1)
+      return tags;
+
+    tagsEndPos = spaceIdx; // mark the end of the tag block
+    const QByteArray tagData = line.mid(1, spaceIdx - 1); // exclude '@'
+    QList<QByteArray> tagList = tagData.split(';');
+
+    for (const QByteArray &rawTag: tagList) {
+      if (rawTag.isEmpty())
+        continue;
+
+      const int eqIdx = rawTag.indexOf('=');
+      QString key;
+      QString value;
+
+      if (eqIdx == -1) {
+        key = QString::fromUtf8(rawTag);
+        value.clear();
+      } else {
+        key = QString::fromUtf8(rawTag.left(eqIdx));
+        value = QString::fromUtf8(rawTag.mid(eqIdx + 1));
+      }
+
+      // unescape value
+      QString unescaped;
+      for (int i = 0; i < value.size(); ++i) {
+        if (value[i] == '\\' && i + 1 < value.size()) {
+          QChar next = value[i + 1];
+          switch (next.unicode()) {
+            case ':':
+              unescaped += ';';
+              break;
+            case 's':
+              unescaped += ' ';
+              break;
+            case '\\':
+              unescaped += '\\';
+              break;
+            case 'r':
+              unescaped += '\r';
+              break;
+            case 'n':
+              unescaped += '\n';
+              break;
+            default:
+              unescaped += next;
+              break; // drop invalid escape char
+          }
+          i++; // skip next char
+        } else if (value[i] == '\\') {
+          // trailing backslash, ignore
+        } else {
+          unescaped += value[i];
+        }
+      }
+
+      // empty values treated as missing
+      if (unescaped.isEmpty())
+        tags[key] = QVariant();
+      else
+        tags[key] = QVariant(unescaped);
+    }
+
+    return tags;
   }
 
 }

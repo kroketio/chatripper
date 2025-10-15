@@ -59,6 +59,14 @@ class Message(QEventBase, QClass):
     dest: Account = None
     channel: Channel = None
     from_system: bool = False
+    tag_msg: bool = False
+
+@dataclass
+class MessageTags(QEventBase, QClass):
+    line: bytes
+    account: Account = None
+    tags: Dict[str,Any] = field(default_factory=dict)
+    from_system: bool = False
 
 @dataclass
 class AuthUser(QEventBase, QClass):

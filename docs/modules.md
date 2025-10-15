@@ -163,6 +163,32 @@ def nick_change(self, ev: NickChange) -> NickChange:
     return ev
 ```
 
+### Tag Message
+
+Intercept a `TAGMSG`.
+
+```python3
+@qirc.on(QIRCEvent.TAG_MSG)
+def tag_msg_handler(self, msg: Message) -> Message:
+    print("intercepted tag message", msg.tag_msg)
+    print("tags", msg.tags)
+    return msg
+```
+
+### Verify tags
+
+Verify incoming (user-supplied) message tags. Runs early, before 
+parsing the line.
+
+```python3
+@qirc.on(QIRCEvent.VERIFY_MSG_TAGS)
+def tags_verify_handler(self, msg: MessageTags) -> MessageTags:
+    print("raw line", msg.line)
+    print("tags", msg.tags)
+    print("account", msg.account)
+    return msg
+```
+
 ### Peer Max Connections
 
 Emitted when an IP has reached its maximum allowed connections to the IRC 

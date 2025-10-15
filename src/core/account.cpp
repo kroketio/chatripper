@@ -198,12 +198,15 @@ bool Account::setNick(const QSharedPointer<QEventNickChange> &event, bool broadc
   return true;
 }
 
-void Account::message(const irc::client_connection *conn, QSharedPointer<QEventMessage> &message) {
+void Account::message(QSharedPointer<QEventMessage> &message) {
   // @TODO: deal with history when we are offline
+  auto ev_type = QEnums::QIRCEvent::PRIVATE_MSG;
+  if (message->tag_msg)
+    ev_type = QEnums::QIRCEvent::TAG_MSG;
 
-  if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::PRIVATE_MSG)) {
+  if (g::ctx->snakepit->hasEventHandler(ev_type)) {
     const auto result = g::ctx->snakepit->event(
-      QEnums::QIRCEvent::PRIVATE_MSG,
+      ev_type,
       message);
 
     if (result.canConvert<QSharedPointer<QEventMessage>>()) {

@@ -42,7 +42,7 @@ public:
 
   void merge(const QSharedPointer<Account> &from);
 
-  void message(const irc::client_connection *conn, QSharedPointer<QEventMessage> &message);
+  void message(QSharedPointer<QEventMessage> &message);
 
   void setRandomUID();
 

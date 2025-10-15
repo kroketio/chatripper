@@ -143,7 +143,8 @@ namespace irc {
     void handlePART(const QList<QByteArray> &args);
     void handleRENAME(const QList<QByteArray> &args);
     void handleCHATHISTORY(const QList<QByteArray> &args);
-    void handlePRIVMSG(const QList<QByteArray> &args);
+    void handlePRIVMSG(QMap<QString, QVariant>& tags, const QList<QByteArray> &args);
+    void handleTAGMSG(QMap<QString, QVariant>& tags, const QList<QByteArray> &args);
     void handleQUIT(const QList<QByteArray> &args);
     void handleNAMES(const QList<QByteArray> &args);
     void handleTOPIC(const QList<QByteArray> &args);

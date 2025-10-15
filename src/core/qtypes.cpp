@@ -93,3 +93,12 @@ QSharedPointer<QObject> QEventChannelRename::getAccount() const {
 void QEventChannelRename::setAccount(const QSharedPointer<QObject>& a) {
   account = qSharedPointerCast<Account>(a);
 }
+
+// QEventMessageTags
+QSharedPointer<QObject> QEventMessageTags::getAccount() const {
+  return qSharedPointerCast<QObject>(account);
+}
+
+void QEventMessageTags::setAccount(const QSharedPointer<QObject>& a) {
+  account = qSharedPointerCast<Account>(a);
+}

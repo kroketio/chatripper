@@ -60,10 +60,11 @@ namespace irc {
    * @return QByteArray The full tag prefix, including leading '@' and trailing space,
    *                   or an empty QByteArray if no tags are to be sent.
    */
-  QByteArray buildTagPrefix(
+  QByteArray buildMessageTags(
       const QSharedPointer<QEventMessage> &message,
       const QSharedPointer<Account> &src,
       const Flags<PROTOCOL_CAPABILITY> &capabilities
       );
 
+  QMap<QString, QVariant> parseMessageTags(const QByteArray &line, int &tagsEndPos);
 }

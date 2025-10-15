@@ -144,6 +144,8 @@ namespace irc {
             capabilities.set(PROTOCOL_CAPABILITY::ECHO_MESSAGE);
           } else if (cap == "znc.in/self-message") {
             capabilities.set(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE);
+          } else if (cap == "message-tags") {
+            capabilities.set(PROTOCOL_CAPABILITY::MESSAGE_TAGS);
           }
         }
       } else {
@@ -470,6 +472,7 @@ namespace irc {
   }
 
   void client_connection::message(const QSharedPointer<QEventMessage> &message) {
+    const bool is_tag_msg = message->tag_msg;
     const bool cap_echo_message = capabilities.has(PROTOCOL_CAPABILITY::ECHO_MESSAGE);
     const bool cap_self_message = capabilities.has(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE);
     auto const &src = message->account;
@@ -492,15 +495,19 @@ namespace irc {
       _prefix = src->prefix();
     }
 
-    const QByteArray tag_prefix = buildTagPrefix(message, src, capabilities);
+    const QByteArray tag_prefix = buildMessageTags(message, src, capabilities);
+    QByteArrayList msg;
+    msg << tag_prefix + ":" + _prefix;
+    msg << (is_tag_msg ? "TAGMSG" : "PRIVMSG");
+    msg << target;
 
-    const QByteArray msg =
-        tag_prefix +
-        ":" + _prefix +
-        " PRIVMSG " + target +
-        " :" + message->text + "\r\n";
+    if (!is_tag_msg)
+      msg << ":" + message->text;
 
-    emit sendData(msg);
+    QByteArray data = msg.join(" ");
+    data += "\r\n";
+
+    emit sendData(data);
   }
 
   void client_connection::channel_join(const QSharedPointer<QEventChannelJoin> &event) {
@@ -671,7 +678,7 @@ namespace irc {
     }
   }
 
-  void client_connection::handlePRIVMSG(const QList<QByteArray> &args) {
+  void client_connection::handlePRIVMSG(QMap<QString, QVariant>& tags, const QList<QByteArray> &args) {
     if (args.size() < 2) {
       reply_num(461, "PRIVMSG :Not enough parameters");
       return;
@@ -690,6 +697,7 @@ namespace irc {
     msg->raw = args.join(" ");
     msg->user = user;
     msg->host = m_host;
+    msg->tags = tags;
 
     if (target.startsWith('#')) {
       const auto chan_ptr = Channel::get(target.mid(1));
@@ -699,7 +707,7 @@ namespace irc {
       }
 
       msg->channel = chan_ptr;
-      chan_ptr->message(this, msg);
+      chan_ptr->message(msg);
     } else {
       const auto dest = g::ctx->irc_nick_get(target);
       if (dest.isNull()) {
@@ -708,7 +716,48 @@ namespace irc {
       }
 
       msg->dest = dest;
-      m_account->message(this, msg);
+      m_account->message(msg);
+    }
+  }
+
+  void client_connection::handleTAGMSG(QMap<QString, QVariant>& tags, const QList<QByteArray> &args) {
+    if (args.isEmpty()) {
+      reply_num(461, "TAGMSG :Not enough parameters");
+      return;
+    }
+
+    const auto _nick = nick();
+    const QByteArray target = args[0];
+
+    auto msg = QSharedPointer<QEventMessage>(new QEventMessage);
+    msg->account = m_account;
+    msg->conn_id = m_uid;
+    msg->from_system = false;
+    msg->nick = _nick;
+    msg->raw = args.join(" ");
+    msg->user = user;
+    msg->host = m_host;
+    msg->tags = tags;
+    msg->tag_msg = true;
+
+    if (target.startsWith('#')) {
+      const auto chan_ptr = Channel::get(target.mid(1));
+      if (chan_ptr.isNull()) {
+        send_raw("401 " + _nick + " " + target + " :No such nick/channel");
+        return;
+      }
+
+      msg->channel = chan_ptr;
+      chan_ptr->message(msg);
+    } else {
+      const auto dest = g::ctx->irc_nick_get(target);
+      if (dest.isNull()) {
+        send_raw("401 " + _nick + " " + target + " :No such nick/channel");
+        return;
+      }
+
+      msg->dest = dest;
+      m_account->message(msg);
     }
   }
 
@@ -1346,10 +1395,6 @@ namespace irc {
   }
 
   void client_connection::parseIncoming(QByteArray &line) {
-    line = line.trimmed();
-    if (line.isEmpty())
-      return;
-
     if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::RAW_MSG)) {
       auto raw = QSharedPointer<QEventRawMessage>(new QEventRawMessage());
       raw->raw = line;
@@ -1365,6 +1410,36 @@ namespace irc {
 
         line = raw->raw;
       }
+    }
+
+    // parse message-tags
+    QMap<QString, QVariant> tags;
+    if (!m_account.isNull() && line.startsWith("@") && capabilities.has(PROTOCOL_CAPABILITY::MESSAGE_TAGS)) {
+      int tagsEnd = -1;
+      tags = parseMessageTags(line, tagsEnd);
+      // trim the line to remove the tag block
+      if (tagsEnd != -1)
+        line = line.mid(tagsEnd + 1);
+      line = line.trimmed();
+
+      if (g::ctx->snakepit->hasEventHandler(QEnums::QIRCEvent::VERIFY_MSG_TAGS)) {
+        auto tag_event_message = QSharedPointer<QEventMessageTags>(new QEventMessageTags());
+        tag_event_message->line = line;
+        tag_event_message->tags = tags;
+        tag_event_message->account = m_account;
+
+        const auto result = g::ctx->snakepit->event(
+          QEnums::QIRCEvent::VERIFY_MSG_TAGS,
+          tag_event_message);
+
+        if (result.canConvert<QSharedPointer<QEventMessage>>()) {
+          const auto resPtr = result.value<QSharedPointer<QEventMessage>>();
+          if (resPtr->cancelled())
+            return;
+        }
+      }
+    } else {
+      line = line.trimmed();
     }
 
     auto parts = split_irc(line);
@@ -1393,7 +1468,9 @@ namespace irc {
     else if (cmd == "PART" && is_ready)
       handlePART(parts);
     else if (cmd == "PRIVMSG" && is_ready)
-      handlePRIVMSG(parts);
+      handlePRIVMSG(tags, parts);
+    else if (cmd == "TAGMSG" && is_ready)
+      handleTAGMSG(tags, parts);
     else if (cmd == "QUIT")
       handleQUIT(parts);
     else if (cmd == "NAMES" && is_ready)

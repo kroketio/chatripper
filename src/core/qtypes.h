@@ -162,6 +162,7 @@ class QEventMessage final : public QEventBase {
   Q_PROPERTY(QSharedPointer<QObject> dest READ getDest WRITE setDest)
   Q_PROPERTY(QSharedPointer<QObject> channel READ getChannel WRITE setChannel)
   Q_PROPERTY(bool from_system MEMBER from_system)
+  Q_PROPERTY(bool tag_msg MEMBER tag_msg)
 public:
   QByteArray id;
   QByteArray conn_id;
@@ -189,6 +190,8 @@ public:
 
   // t:bool d:False
   bool from_system = false;
+  // t:bool d:False
+  bool tag_msg = false;
 
   QEventMessage() = default;
 
@@ -200,6 +203,29 @@ public:
 
   QSharedPointer<QObject> getDest() const;
   void setDest(const QSharedPointer<QObject>& a);
+};
+
+class QEventMessageTags final : public QEventBase {
+  Q_GADGET
+  Q_PROPERTY(QSharedPointer<QObject> account READ getAccount WRITE setAccount)
+  Q_PROPERTY(QMap<QString, QVariant> tags MEMBER tags)
+  Q_PROPERTY(bool from_system MEMBER from_system)
+public:
+  // t:Account d:None
+  QSharedPointer<Account> account;
+
+  // t:Dict[str,Any] d:field(default_factory=dict)
+  QMap<QString, QVariant> tags;
+
+  QByteArray line;
+
+  // t:bool d:False
+  bool from_system = false;
+
+  QSharedPointer<QObject> getAccount() const;
+  void setAccount(const QSharedPointer<QObject>& a);
+
+  QEventMessageTags() = default;
 };
 
 class QEventAuthUser final : public QEventBase {
@@ -245,7 +271,9 @@ public:
     RAW_MSG               = 1 << 5,
     PEER_MAX_CONNECTIONS  = 1 << 6,
     NICK_CHANGE           = 1 << 7,
-    CHANNEL_RENAME        = 1 << 8
+    CHANNEL_RENAME        = 1 << 8,
+    TAG_MSG               = 1 << 9,
+    VERIFY_MSG_TAGS       = 1 << 10
   };
   Q_ENUM(QIRCEvent)
 };
@@ -268,3 +296,4 @@ Q_DECLARE_METATYPE(QSharedPointer<QEventPeerMaxConnections>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventChannelPart>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventNickChange>)
 Q_DECLARE_METATYPE(QSharedPointer<QEventChannelRename>)
+Q_DECLARE_METATYPE(QSharedPointer<QEventMessageTags>)
