@@ -1,5 +1,6 @@
 #pragma once
-
+#include <random>
+#include <QUuid>
 #include <QByteArray>
 #include <QSharedPointer>
 #include <QMap>
@@ -67,4 +68,5 @@ namespace irc {
       );
 
   QMap<QString, QVariant> parseMessageTags(const QByteArray &line, int &tagsEndPos);
+  QByteArray generateBatchRef();
 }

@@ -147,4 +147,8 @@ namespace irc {
     return tags;
   }
 
+  QByteArray generateBatchRef() {
+    return QUuid::createUuid().toByteArray(QUuid::Id128);
+  }
+
 }

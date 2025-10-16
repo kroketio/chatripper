@@ -22,12 +22,10 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
   const QString cmd = QString::fromUtf8(event->subcmd).toUpper();
   const QList<QByteArray> &args = event->args;
 
-  // set metadata
   if (cmd == "SET") {
     if (args.size() < 2) return;
-
-    auto& key = args[0];
-    auto& value = args[1];
+    auto &key = args[0];
+    auto &value = args[1];
 
     if (event->account != m_account) {
       event->error_code = "KEY_NO_PERMISSION";
@@ -41,11 +39,9 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
     return;
   }
 
-  // clear metadata
   if (cmd == "CLEAR") {
     if (args.isEmpty()) return;
-
-    auto& key = args[0];
+    auto &key = args[0];
 
     if (event->account != m_account) {
       event->error_code = "KEY_NO_PERMISSION";
@@ -59,15 +55,25 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
     return;
   }
 
-  // list or get metadata
-  if (cmd == "LIST" || cmd == "GET") {
+  if (cmd == "LIST") {
+    // populate all keys
     for (auto it = kv.constBegin(); it != kv.constEnd(); ++it) {
       event->metadata[it.key()] = it.value();
     }
     return;
   }
 
-  // subscribe to metadata keys
+  if (cmd == "GET") {
+    // populate only requested keys
+    for (const auto &key : args) {
+      if (kv.contains(key)) {
+        event->metadata[key] = kv[key];
+      }
+      // missing keys are left out; metadata() will respond with RPL_KEYNOTSET
+    }
+    return;
+  }
+
   if (cmd == "SUB") {
     for (const auto &a : args) {
       QByteArray key = a;
@@ -77,7 +83,6 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
     return;
   }
 
-  // unsubscribe from metadata keys
   if (cmd == "UNSUB") {
     for (const auto &a : args) {
       QByteArray key = a;
@@ -89,7 +94,6 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
     return;
   }
 
-  // list subscriptions for the actor
   if (cmd == "SUBS") {
     for (auto it = subscribers.constBegin(); it != subscribers.constEnd(); ++it) {
       if (it.value().contains(event->account)) {

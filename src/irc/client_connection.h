@@ -96,7 +96,7 @@ namespace irc {
     // QByteArray username() const { return user; }
     QByteArray host() const { return m_host; }
 
-    void send_raw(const QByteArray &line) const;
+    void send_raw(const QByteArray &line);
     void reply_num(int code, const QByteArray &text);
     void reply_self(const QByteArray &command, const QByteArray &args);
 
@@ -121,8 +121,8 @@ namespace irc {
     QByteArray prefix();
 
   signals:
-    void sendData(const QByteArray &data) const;
-    void disconnected(const QByteArray &nick_to_delete);
+    void sendData(QByteArray data);
+    void disconnected(QByteArray nick_to_delete);
 
   private slots:
     void onReadyRead();

@@ -182,6 +182,9 @@ namespace irc {
 
     const QByteArray target = args[0];
     const QByteArray subcmd = args[1];
+    if (subcmd == "LIST" && target == "dsc")
+      int e = 1;
+
     QList<QByteArray> sub_args = args.mid(2);
 
     auto event = QSharedPointer<QEventMetadata>::create();
@@ -201,13 +204,13 @@ namespace irc {
       event->setDest(m_account.staticCast<QObject>());
       m_account->metadata()->handle(event);
     } else {
-      const auto acc = Account::get_by_name(target);
-      if (acc.isNull()) {
+      const auto dest = g::ctx->irc_nick_get(target);
+      if (dest.isNull()) {
         send_raw("401 " + nick() + " " + target + " :No such nick/channel");
         return;
       }
-      event->setDest(acc.staticCast<QObject>());
-      acc->metadata()->handle(event);
+      event->setDest(dest.staticCast<QObject>());
+      dest->metadata()->handle(event);
     }
 
     metadata(event);
@@ -496,7 +499,7 @@ namespace irc {
     if (user.length() > 16) {
       const QString msg = QString("USER :Your user is too long (more than 16 characters)").arg(user);
       reply_num(461, msg.toUtf8());
-      forceDisconnect();
+      return forceDisconnect();
       return;
     }
 
@@ -513,68 +516,113 @@ namespace irc {
     QReadLocker locker(&mtx_lock);
   }
 
-  void client_connection::metadata(const QSharedPointer<QEventMetadata> &event) {
-    QByteArrayList msg;
+void client_connection::metadata(const QSharedPointer<QEventMetadata> &event) {
+  QByteArrayList msg;
+  const QByteArray serverPrefix = ":" + ThreadedServer::serverName();
+  const QByteArray targetName =
+    event->isAccount() ? event->dest->nick()
+    : event->isChannel() ? "#" + event->channel->name()
+    : "*";
 
-    const QByteArray targetName =
-      event->isAccount()
-      ? event->dest->nick()
-      : event->isChannel()
-        ? "#" + event->channel->name()
-        : "*";
-
-    // error handling
-    if (!event->error_code.isEmpty()) {
-      msg.clear();
-      msg << ":" + prefix();
-      msg << "FAIL METADATA " + event->error_code;
-      msg << targetName;
-      msg << event->error_key;
-      msg << ":You do not have permission to modify metadata\r\n";
-      emit sendData(msg.join(" "));
-      return;
-    }
-
-    // send metadata key/value pairs
-    for (auto it = event->metadata.constBegin(); it != event->metadata.constEnd(); ++it) {
-      QByteArray key = it.key().toUtf8();
-      if (key.startsWith("__")) continue; // internal keys
-
-      QByteArray value = it.value().toString().toUtf8();
-
-      msg.clear();
-      msg << ":" + prefix();
-      msg << "761" << nick();
-      msg << targetName;
-      msg << key << "*"
-          << ":" + value + "\r\n";
-
-      emit sendData(msg.join(" "));
-    }
-
-    // end of metadata
+  // Handle error codes first
+  if (!event->error_code.isEmpty()) {
     msg.clear();
-    msg << ":" + prefix();
-    msg << "762" << nick();
-    msg << targetName << ":End of metadata\r\n";
+    msg << serverPrefix
+        << "FAIL METADATA " + event->error_code
+        << targetName
+        << event->error_key
+        << ":You do not have permission to modify metadata\r\n";
+    emit sendData(msg.join(" "));
+    return;
+  }
+
+  const QString cmd = QString::fromUtf8(event->subcmd).toUpper();
+
+  // GET, LIST, SYNC → batch wrapped
+  if (cmd == "GET" || cmd == "LIST" || cmd == "SYNC") {
+    const QByteArray batchRef = generateBatchRef();
+    // Start batch
+    msg.clear();
+    msg << serverPrefix
+        << "BATCH +" + batchRef + " metadata\r\n";
     emit sendData(msg.join(" "));
 
-    // handle subscriptions
-    for (auto it = event->subscriptions.constBegin(); it != event->subscriptions.constEnd(); ++it) {
-      QList<QByteArray> keys;
-      for (const auto &a : it.value())
-        keys << a->nick();
+    QByteArray batchTag = "@batch=" + batchRef;
+    QList<QByteArray> keysToSend;
 
-      if (!keys.isEmpty()) {
-        msg.clear();
-        msg << ":" + prefix();
-        msg << "770" << nick();
-        msg << it.key().toUtf8();
-        msg << keys.join(" ");
-        emit sendData(msg.join(" "));
+    if (cmd == "GET") {
+      keysToSend = event->args;  // keys explicitly requested
+    } else if (cmd == "LIST" || cmd == "SYNC") {
+      for (const auto &k : event->metadata.keys())
+        keysToSend.append(k.toUtf8());
+    }
+
+    for (const auto &key : keysToSend) {
+      if (key.startsWith("__")) continue; // skip internal keys
+
+      msg.clear();
+      msg << batchTag;
+
+      if (!event->metadata.contains(QString::fromUtf8(key))) {
+        msg << "766" << nick() << targetName << key
+            << ":key not set\r\n"; // RPL_KEYNOTSET
+      } else {
+        QByteArray value = event->metadata[QString::fromUtf8(key)].toString().toUtf8();
+        msg << "761" << nick() << targetName << key << "*" << ":" + value + "\r\n"; // RPL_KEYVALUE
       }
+      emit sendData(msg.join(" "));
+    }
+
+    // End batch
+    msg.clear();
+    msg << serverPrefix
+        << "BATCH -" + batchRef + "\r\n";
+    emit sendData(msg.join(" "));
+  }
+
+  // SET and CLEAR → direct, non-batch
+  else if (cmd == "SET" || cmd == "CLEAR") {
+    QList<QByteArray> keysToSend;
+    if (cmd == "SET") {
+      for (const auto &k : event->metadata.keys())
+        keysToSend.append(k.toUtf8());
+    } else { // CLEAR
+      for (const auto &k : event->metadata.keys())
+        keysToSend.append(k.toUtf8());
+    }
+
+    for (const auto &key : keysToSend) {
+      if (key.startsWith("__")) continue;
+
+      msg.clear();
+      msg << serverPrefix;
+
+      if (!event->metadata.contains(QString::fromUtf8(key))) {
+        // key removal or unset
+        msg << "766" << nick() << targetName << key << ":key not set\r\n";
+      } else {
+        QByteArray value = event->metadata[QString::fromUtf8(key)].toString().toUtf8();
+        msg << "761" << nick() << targetName << key << "*" << ":" + value + "\r\n";
+      }
+      emit sendData(msg.join(" "));
     }
   }
+
+  // Subscriptions
+  for (auto it = event->subscriptions.constBegin(); it != event->subscriptions.constEnd(); ++it) {
+    const QByteArray key = it.key().toUtf8();
+    QList<QByteArray> nicks;
+    for (const auto &acc : it.value())
+      nicks << acc->nick();
+
+    if (!nicks.isEmpty()) {
+      msg.clear();
+      msg << serverPrefix << "770" << nick() << key << nicks.join(" ") << "\r\n"; // RPL_METADATASUBOK
+      emit sendData(msg.join(" "));
+    }
+  }
+}
+
 
   void client_connection::message(const QSharedPointer<QEventMessage> &message) {
     const bool is_tag_msg = message->tag_msg;
@@ -683,7 +731,7 @@ namespace irc {
         names << acc->nick();
     }
 
-    const QByteArray namesPrefix = "353 " + account_nick + " = " + channel->name() + " :";
+    const QByteArray namesPrefix = "353 " + account_nick + " = " + "#" + channel->name() + " :";
     send_raw(namesPrefix + names.join(" "));
     send_raw("366 " + account_nick + " " + "#" + channel->name() + " :End of NAMES list");
   }
@@ -882,7 +930,7 @@ namespace irc {
     //   ch->remove(m_account);
     //   m_server->removeChannelIfEmpty(ch);
     // }
-    forceDisconnect();
+    return forceDisconnect();
   }
 
   void client_connection::handleRENAME(const QList<QByteArray> &args) {
@@ -1126,7 +1174,7 @@ namespace irc {
     return true;
   }
 
-  void client_connection::send_raw(const QByteArray &line) const {
+  void client_connection::send_raw(const QByteArray &line) {
     const QByteArray out = ":" + ThreadedServer::serverName() + " " + line + "\r\n";
     emit sendData(out);
   }
@@ -1219,7 +1267,7 @@ namespace irc {
       const auto irc_nick_ptr = g::ctx->irc_nick_get(m_nick.toLower());
       if (!irc_nick_ptr.isNull()) {
         reply_num(433, m_nick + " :Nickname is already in use");
-        forceDisconnect();
+        return forceDisconnect();
       }
     }
 
@@ -1273,8 +1321,7 @@ namespace irc {
   void client_connection::handleAUTHENTICATE(const QList<QByteArray> &args) {
     if (args.empty()) {
       send_raw("uwot?");
-      forceDisconnect();
-      return;
+      return forceDisconnect();
     }
 
     const auto& arg = args.at(0);
@@ -1320,12 +1367,11 @@ namespace irc {
         reply += ": " + auth->reason;
 
       reply_num(900, reply);
-      forceDisconnect();
-      return;
+      return forceDisconnect();
     }
 
     reply_num(900, "SASL authentication failed");
-    forceDisconnect();
+    return forceDisconnect();
   }
 
   void client_connection::forceDisconnect() const {
@@ -1447,7 +1493,7 @@ namespace irc {
 
   void client_connection::onWrite(const QByteArray &data) const {
     if (m_websocket && m_websocket->isValid()) {
-      qDebug() << ">" << data;
+      qDebug() << "S:" << data;
       m_websocket->sendTextMessage(data);
       return;
     }
@@ -1498,11 +1544,11 @@ namespace irc {
   }
 
   void client_connection::disconnect() const {
-    forceDisconnect();
+    return forceDisconnect();
   }
 
   void client_connection::parseIncomingWS(QByteArray line) {
-    qDebug() << line;
+    qDebug() << "C:" << line;
     return parseIncoming(line);
   }
 
