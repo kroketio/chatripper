@@ -18,9 +18,9 @@ While working on your module, we suggest to copy the folder `src/python/qircd/`
 inside your development environment, so that you have type completion for the various 
 dataclasses, and events.
 
-### Example
+### Full example
 
-An example module `data/modules/mod_test.py`
+ `data/modules/mod_test.py`
 
 ```python3
 from qircd import *
@@ -177,14 +177,16 @@ def tag_msg_handler(self, msg: Message) -> Message:
 
 ### Verify tags
 
-Verify incoming (user-supplied) message tags. Runs early, before 
-parsing the line.
+Verify incoming (user-supplied) message tags. Runs early, before parsing the line. 
+
+You can add/modify/remove tags here - useful if you want to filter them.
 
 ```python3
 @qirc.on(QIRCEvent.VERIFY_MSG_TAGS)
 def tags_verify_handler(self, msg: MessageTags) -> MessageTags:
     print("raw line", msg.line)
-    print("tags", msg.tags)
+    for k, v in msg.tags.items():
+        print("tag", k, v)
     print("account", msg.account)
     return msg
 ```

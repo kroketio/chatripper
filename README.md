@@ -4,7 +4,7 @@ Fast, self-hosted, highly scriptable chat platform for team communications.
 
 **Work in progress**
 
-### Design philosophy
+### Goals
 
 chatripper is based on IRC. Read [more here](docs/design.md).
 
@@ -13,7 +13,7 @@ chatripper is based on IRC. Read [more here](docs/design.md).
 * Multitenancy
 * Roles/permissions system
 * Accounts, history, metadata, previews, video/audio calls
-* Built-in bouncer
+* Built-in bouncer, and services
 * No config, configuration happens through the admin webif
 * Server-side scripting with Python
 * Built-in webserver, with a web chat client
@@ -45,9 +45,9 @@ For more information about Docker: [docs/docker.md](docs/docker.md)
 
 ## Performance
 
-Chatripper is a fast chat system that handles thousands of connections concurrently, even on low-powered hardware.
+chatripper handles thousands of connections concurrently, even on low-powered hardware.
 
-[docs/architecture.md](docs/architecture.md).
+More info [docs/architecture.md](docs/architecture.md).
 
 ## Testimonials
 
