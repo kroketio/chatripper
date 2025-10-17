@@ -146,6 +146,8 @@ namespace irc {
             capabilities.set(PROTOCOL_CAPABILITY::ZNC_SELF_MESSAGE);
           } else if (cap == "message-tags") {
             capabilities.set(PROTOCOL_CAPABILITY::MESSAGE_TAGS);
+          } else if (cap == "draft/metadata" || cap == "draft/metadata-2") {
+            capabilities.set(PROTOCOL_CAPABILITY::METADATA);
           }
         }
       } else {
@@ -180,8 +182,11 @@ namespace irc {
       return;
     }
 
-    const QByteArray target = args[0];
-    const QByteArray subcmd = args[1];
+    if (capabilities.has(PROTOCOL_CAPABILITY::METADATA))
+      return;
+
+    const QByteArray& target = args[0];
+    const QByteArray& subcmd = args[1];
     if (subcmd == "LIST" && target == "dsc")
       int e = 1;
 
