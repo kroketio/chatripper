@@ -107,7 +107,7 @@ namespace irc {
           ev->ip = QHostAddress(remote_ip).toString();
 
           const auto result = g::ctx->snakepit->event(
-            QEnums::QIRCEvent::RAW_MSG,
+            QEnums::QIRCEvent::PEER_MAX_CONNECTIONS,
             ev);
         }
 
