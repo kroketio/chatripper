@@ -2,6 +2,7 @@
 #include <QDateTime>
 #include <QMutexLocker>
 
+#include "caps.h"
 #include "irc/threaded_server.h"
 #include "irc/client_connection.h"
 
@@ -13,6 +14,7 @@
 
 namespace irc {
   constexpr static qint64 CHUNK_SIZE = 1024;
+  constexpr int IRC_MAX_LEN = 480;
 
   void client_connection::init() {
     const QUuid uuid = QUuid::createUuid();
@@ -148,6 +150,10 @@ namespace irc {
             capabilities.set(PROTOCOL_CAPABILITY::MESSAGE_TAGS);
           } else if (cap == "draft/metadata" || cap == "draft/metadata-2") {
             capabilities.set(PROTOCOL_CAPABILITY::METADATA);
+          } else if (cap == "soju.im/FILEHOST") {
+            capabilities.set(PROTOCOL_CAPABILITY::FILEHOST);
+          } else if (cap == "extended-isupport") {
+            capabilities.set(PROTOCOL_CAPABILITY::EXTENDED_ISUPPORT);
           }
         }
       } else {
@@ -1303,8 +1309,33 @@ void client_connection::metadata(const QSharedPointer<QEventMetadata> &event) {
     reply_num(3, "This server was created Dec 21 1989 at 13:37:00 (lie)");
     reply_num(4, ThreadedServer::serverName() + " wut-7.2.2+bla.7.3 what is this.");
 
-    const QByteArray line = "005 " + _nick + " BOT=b CASEMAPPING=ascii CHANNELLEN=64 CHANTYPES=# ELIST=U EXCEPTS EXTBAN=,m :are supported by this server";
-    send_raw(line);
+    // 005 isupport
+    QByteArray base = "005 " + account_nick + " ";
+    QByteArray current = base;
+
+    for (auto it = m_server->isupport.constBegin(); it != m_server->isupport.constEnd(); ++it) {
+      QByteArray token;
+      if (!it.value().isEmpty())
+        token = it.key() + "=" + it.value();
+      else
+        token = it.key();
+
+      if (current.size() + token.size() + 1 > IRC_MAX_LEN) {
+        current += ":are supported by this server";
+        send_raw(current);
+        current = base;
+      }
+
+      if (current != base)
+        current += ' ';
+      current += token;
+    }
+
+    if (current != base) {
+      current += " :are supported by this server";
+      send_raw(current);
+    }
+
 
     handleLUSERS({});
     handleMOTD({});

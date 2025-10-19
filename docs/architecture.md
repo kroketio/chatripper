@@ -16,3 +16,7 @@ todo
 - `znc.in/self-message`
 - `sasl`
 - `draft/channel-rename`
+- `extended-isupport`
+
+### isupport
+- `soju.im/FILEHOST`

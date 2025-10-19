@@ -12,6 +12,8 @@ namespace irc {
     ZNC_SELF_MESSAGE  = 1 << 7,
     FISH              = 1 << 8,
     CHANNEL_RENAME    = 1 << 9,  // https://ircv3.net/specs/extensions/channel-rename
-    METADATA          = 1 << 10
+    METADATA          = 1 << 10,
+    FILEHOST          = 1 << 11,
+    EXTENDED_ISUPPORT = 1 << 12
   };
 }

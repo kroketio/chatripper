@@ -2,6 +2,7 @@
 
 #include <QTcpServer>
 #include <QHash>
+#include <QList>
 #include <QHostAddress>
 #include <QMutex>
 #include <QThread>
@@ -26,6 +27,9 @@ namespace irc {
     static QByteArray serverName();
     QByteArray motd();
     QStringList capabilities;
+    QHash<QByteArray, QByteArray> isupport;
+
+    QByteArray network_name = "chatripper";
 
     unsigned int concurrent_peers();
 

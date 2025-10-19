@@ -31,6 +31,7 @@ namespace irc {
       throw std::runtime_error("thread count cannot be 0");
 
     // @TODO: replace with enums
+    capabilities << "soju.im/FILEHOST";
     capabilities << "draft/metadata";
     capabilities << "draft/metadata-2";
     capabilities << "message-tags";
@@ -44,6 +45,46 @@ namespace irc {
     // capabilities << "fish";
     capabilities << "sasl";
     capabilities << "draft/channel-rename";
+    capabilities << "extended-isupport";
+
+    // @TODO: replace with actual values
+    isupport.insert("AWAYLEN", "390");
+    isupport.insert("BOT", "B");
+    isupport.insert("CASEMAPPING", "ascii");
+    isupport.insert("CHANLIMIT", "#:100");
+    isupport.insert("CHANMODES", "Ibe,k,fl,CEMRUimnstu");
+    isupport.insert("CHANNELLEN", "64");
+    isupport.insert("CHANTYPES", "#");
+//    isupport.insert("CHATHISTORY", "1000");
+//    isupport.insert("draft/CHATHISTORY", "1000");
+    isupport.insert("ELIST", "U");
+    isupport.insert("EXCEPTS", QByteArray());
+    isupport.insert("EXTBAN", ",m");
+ //   isupport.insert("EXTJWT", "1");
+    isupport.insert("FORWARD", "f");
+
+    isupport.insert("INVEX", QByteArray());
+    isupport.insert("KICKLEN", "390");
+    isupport.insert("MAXLIST", "beI:60");
+    isupport.insert("MAXTARGETS", "4");
+    isupport.insert("MODES", QByteArray());
+    isupport.insert("MONITOR", "100");
+    isupport.insert("MSGREFTYPES", "msgid,timestamp");
+    isupport.insert("NETWORK", network_name);
+    isupport.insert("NICKLEN", "32");
+    isupport.insert("PREFIX", "(qaohv)~&@%+");
+    isupport.insert("RPCHAN", "E");
+    isupport.insert("RPUSER", "E");
+    isupport.insert("SAFELIST", QByteArray());
+
+    isupport.insert("SAFERATE", QByteArray());
+    isupport.insert("STATUSMSG", "~&@%+");
+    isupport.insert("TARGMAX", "NAMES:1,LIST:1,KICK:,WHOIS:1,USERHOST:10,PRIVMSG:4,TAGMSG:4,NOTICE:4,MONITOR:100");
+    isupport.insert("TOPICLEN", "390");
+    isupport.insert("UTF8MAPPING", "rfc8265");
+    isupport.insert("UTF8ONLY", QByteArray());
+//    isupport.insert("VAPID", "");
+    isupport.insert("WHOX", QByteArray());
 
     setup_pool(thread_count);
   }
