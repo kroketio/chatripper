@@ -240,16 +240,6 @@ bool Utils::is_main_thread() {
   return QThread::currentThread() == QCoreApplication::instance()->thread();
 }
 
-QString Utils::uuidBytesToString(const QByteArray &uuidBytes) {
-  if (uuidBytes.size() != 16) {
-    qWarning() << "Invalid UUID byte array size:" << uuidBytes.size();
-    return {};
-  }
-
-  const QUuid uuid = QUuid::fromRfc4122(uuidBytes);
-  return uuid.toString(QUuid::WithoutBraces);
-}
-
 void Utils::timeEnd(const std::string &label, const std::chrono::time_point<std::chrono::high_resolution_clock> start) {
   auto end = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> elapsedSeconds = end - start;

@@ -9,6 +9,7 @@
 #include <QReadWriteLock>
 #include <QDateTime>
 #include <QHash>
+#include <QUuid>
 
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
@@ -24,7 +25,7 @@ class Channel;
 class Account final : public QObject {
 Q_OBJECT
 Q_PROPERTY(QByteArray name READ name WRITE setName NOTIFY nickChanged)
-Q_PROPERTY(QByteArray uid READ uid WRITE setUID)
+Q_PROPERTY(QUuid uid READ uid WRITE setUID)
 Q_PROPERTY(QByteArray password READ password WRITE setPassword)
 Q_PROPERTY(QByteArray nick READ nick WRITE setNick NOTIFY nickChanged)
 Q_PROPERTY(QByteArray host READ host WRITE setHost)
@@ -32,12 +33,12 @@ Q_PROPERTY(QDateTime creation_date MEMBER creation_date)
 
 public:
   explicit Account(const QByteArray& account_name = "", QObject* parent = nullptr);
-  static QSharedPointer<Account> create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation);
+  static QSharedPointer<Account> create_from_db(const QUuid &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation);
   static QSharedPointer<Account> create();
 
   QSharedPointer<QEventAuthUser> verifyPassword(const QSharedPointer<QEventAuthUser> &auth) const;
 
-  static QSharedPointer<Account> get_by_uid(const QByteArray &uid);
+  static QSharedPointer<Account> get_by_uid(const QUuid &uid);
   static QSharedPointer<Account> get_by_name(const QByteArray &name);
   // static QSharedPointer<Account> get_or_create(const QByteArray &account_name);
 
@@ -50,9 +51,9 @@ public:
   QByteArray name();
   void setName(const QByteArray &name);
 
-  QByteArray uid();
+  QUuid uid() const;
   QByteArray uid_str() { return m_uid_str; }
-  void setUID(const QByteArray &uid);
+  void setUID(const QUuid &uid);
 
   QByteArray password();
   void setPassword(const QByteArray &password);
@@ -124,7 +125,7 @@ public:
 signals:
   void nickChanged(const QByteArray& old_nick, const QByteArray& new_nick);
 private:
-  QByteArray m_uid;
+  QUuid m_uid;
   QByteArray m_uid_str;
   QByteArray m_name;
   QByteArray m_nick;

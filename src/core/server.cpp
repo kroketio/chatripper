@@ -18,7 +18,7 @@ QSharedPointer<Server> Server::create() {
 }
 
 QSharedPointer<Server> Server::create_from_db(
-  const QByteArray &id,
+  const QUuid &id,
   const QByteArray &name,
   const QSharedPointer<Account> &owner,
   const QDateTime &creation
@@ -40,13 +40,13 @@ QSharedPointer<Server> Server::create_from_db(
   return server;
 }
 
-void Server::setUID(const QByteArray &uid) {
+void Server::setUID(const QUuid &uid) {
   QWriteLocker locker(&mtx_lock);
   m_uid = uid;
-  m_uid_str = Utils::uuidBytesToString(uid).toUtf8();
+  m_uid_str = uid.toString(QUuid::WithoutBraces).toUtf8();
 }
 
-QByteArray Server::uid() const {
+QUuid Server::uid() const {
   QReadLocker locker(&mtx_lock);
   return m_uid;
 }
@@ -78,9 +78,9 @@ void Server::add_channel(const QSharedPointer<Channel> &channel) {
   m_channels[channel->uid] = channel;
 }
 
-void Server::remove_channel(const QByteArray &channel_name) {
+void Server::remove_channel(const QSharedPointer<Channel> &channel) {
   QWriteLocker locker(&mtx_lock);
-  m_channels.remove(channel_name);
+  m_channels.remove(channel->uid);
 }
 
 QList<QSharedPointer<Channel>> Server::all_channels() const {
@@ -93,9 +93,9 @@ void Server::add_role(const QSharedPointer<Role> &role) {
   m_roles[role->uid()] = role;
 }
 
-void Server::remove_role(const QByteArray &role_name) {
+void Server::remove_role(const QSharedPointer<Role> &role) {
   QWriteLocker locker(&mtx_lock);
-  m_roles.remove(role_name);
+  m_roles.remove(role->uid());
 }
 
 QSharedPointer<Role> Server::role_by_name(const QByteArray &name) const {
@@ -113,12 +113,12 @@ QList<QSharedPointer<Role>> Server::all_roles() const {
   return m_roles.values();
 }
 
-bool Server::is_owned_by(const QByteArray &account_uid) const {
+bool Server::is_owned_by(const QUuid &account_uid) const {
   QReadLocker locker(&mtx_lock);
   return !m_owner.isNull() && m_owner->uid() == account_uid;
 }
 
-QSharedPointer<Server> Server::get_by_uid(const QByteArray &uid) {
+QSharedPointer<Server> Server::get_by_uid(const QUuid &uid) {
   QReadLocker locker(&g::ctx->mtx_cache);
   return g::ctx->servers_lookup_uuid.value(uid);
 }
@@ -154,25 +154,20 @@ void Server::add_account(const QSharedPointer<Account> &acc) {
   m_accounts[acc->uid()] = acc;
 }
 
-void Server::remove_account(const QByteArray &account_uid) {
+void Server::remove_account(const QUuid &account_uid) {
   QWriteLocker locker(&mtx_lock);
   m_accounts.remove(account_uid);
-}
-
-Server::~Server() {
-  qDebug() << "RIP server" << m_name;
 }
 
 QVariantMap Server::to_variantmap() const {
   QReadLocker locker(&mtx_lock);
   QVariantMap map;
 
-  map["uid"] = QString::fromUtf8(m_uid);
+  map["uid"] = m_uid;
   map["name"] = QString::fromUtf8(m_name);
 
-  // Replace owner_uid with owner account's UID
-  if (auto owner = accountOwner()) {
-    map["owner_uid"] = QString::fromUtf8(owner->uid());
+  if (const auto owner = accountOwner()) {
+    map["owner_uid"] = owner->uid();
   } else {
     map["owner_uid"] = QString(); // empty if no owner
   }
@@ -182,19 +177,19 @@ QVariantMap Server::to_variantmap() const {
   // Channels
   QVariantList channelsList;
   for (auto it = m_channels.begin(); it != m_channels.end(); ++it)
-    channelsList.append(QString::fromUtf8(it.value()->uid));
+    channelsList.append(it.value()->uid);
   map["channels"] = channelsList;
 
   // Roles
   QVariantList rolesList;
   for (auto it = m_roles.begin(); it != m_roles.end(); ++it)
-    rolesList.append(QString::fromUtf8(it.value()->uid()));
+    rolesList.append(it.value()->uid());
   map["roles"] = rolesList;
 
   // Accounts
   QVariantList accountsList;
   for (auto it = m_accounts.begin(); it != m_accounts.end(); ++it)
-    accountsList.append(QString::fromUtf8(it.value()->uid()));
+    accountsList.append(it.value()->uid());
   map["accounts"] = accountsList;
 
   return map;
@@ -214,7 +209,7 @@ rapidjson::Value Server::to_rapidjson(
 
   // Use owner account UID
   if (auto owner = accountOwner()) {
-    obj.AddMember("owner_uid", rapidjson::Value(owner->uid().constData(), allocator), allocator);
+    obj.AddMember("owner_uid", rapidjson::Value(owner->uid_str().constData(), allocator), allocator);
   } else {
     obj.AddMember("owner_uid", rapidjson::Value("", allocator), allocator);
   }
@@ -226,23 +221,27 @@ rapidjson::Value Server::to_rapidjson(
   if (include_channels) {
     rapidjson::Value channelsArray(rapidjson::kArrayType);
     for (auto it = m_channels.begin(); it != m_channels.end(); ++it)
-      channelsArray.PushBack(rapidjson::Value(it.value()->uid.constData(), allocator), allocator);
+      channelsArray.PushBack(rapidjson::Value(it.value()->uid_str.constData(), allocator), allocator);
     obj.AddMember("channels", channelsArray, allocator);
   }
 
   if (include_roles) {
     rapidjson::Value rolesArray(rapidjson::kArrayType);
     for (auto it = m_roles.begin(); it != m_roles.end(); ++it)
-      rolesArray.PushBack(rapidjson::Value(it.value()->uid().constData(), allocator), allocator);
+      rolesArray.PushBack(rapidjson::Value(it.value()->uid_str().constData(), allocator), allocator);
     obj.AddMember("roles", rolesArray, allocator);
   }
 
   if (include_accounts) {
     rapidjson::Value accountsArray(rapidjson::kArrayType);
     for (auto it = m_accounts.begin(); it != m_accounts.end(); ++it)
-      accountsArray.PushBack(rapidjson::Value(it.value()->uid().constData(), allocator), allocator);
+      accountsArray.PushBack(rapidjson::Value(it.value()->uid_str().constData(), allocator), allocator);
     obj.AddMember("accounts", accountsArray, allocator);
   }
 
   return obj;
+}
+
+Server::~Server() {
+  qDebug() << "RIP server" << m_name;
 }

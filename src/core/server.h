@@ -4,6 +4,7 @@
 #include <QDateTime>
 #include <QSharedPointer>
 #include <QHash>
+#include <QUuid>
 #include <QReadWriteLock>
 #include <QVariantMap>
 #include <rapidjson/document.h>
@@ -24,42 +25,42 @@ public:
   explicit Server(const QByteArray& server_name = "", QObject* parent = nullptr);
 
   static QSharedPointer<Server> create_from_db(
-      const QByteArray &id,
+      const QUuid &id,
       const QByteArray &name,
       const QSharedPointer<Account> &owner,
       const QDateTime &creation);
 
   static QSharedPointer<Server> create();
 
-  static QSharedPointer<Server> get_by_uid(const QByteArray &uid);
+  static QSharedPointer<Server> get_by_uid(const QUuid &uid);
   static QSharedPointer<Server> get_by_name(const QByteArray &name);
 
   QList<QSharedPointer<Account>> all_accounts() const;
   void add_account(const QSharedPointer<Account> &acc);
-  void remove_account(const QByteArray &account_uid);
+  void remove_account(const QUuid &account_uid);
 
   void merge(const QSharedPointer<Server> &from);
 
   QByteArray name() const;
   void setName(const QByteArray &name);
 
-  QByteArray uid() const;
-  void setUID(const QByteArray &uid);
+  QUuid uid() const;
+  void setUID(const QUuid &uid);
   QByteArray uid_str() const { return m_uid_str; }
 
   [[nodiscard]] QSharedPointer<Account> accountOwner() const;
   void setAccountOwner(const QSharedPointer<Account> &owner);
 
   void add_channel(const QSharedPointer<Channel> &channel);
-  void remove_channel(const QByteArray &channel_name);
+  void remove_channel(const QSharedPointer<Channel> &channel);
   QList<QSharedPointer<Channel>> all_channels() const;
 
   void add_role(const QSharedPointer<Role> &role);
-  void remove_role(const QByteArray &role_name);
+  void remove_role(const QSharedPointer<Role> &role);
   QSharedPointer<Role> role_by_name(const QByteArray &name) const;
   QList<QSharedPointer<Role>> all_roles() const;
 
-  [[nodiscard]] bool is_owned_by(const QByteArray &account_uid) const;
+  [[nodiscard]] bool is_owned_by(const QUuid &account_uid) const;
 
   ~Server() override;
 
@@ -71,14 +72,14 @@ signals:
 private:
   mutable QReadWriteLock mtx_lock;
 
-  QByteArray m_uid;
+  QUuid m_uid;
   QByteArray m_uid_str;
   QByteArray m_name;
   QSharedPointer<Account> m_owner;
 
-  QHash<QByteArray, QSharedPointer<Channel>> m_channels;
-  QHash<QByteArray, QSharedPointer<Role>> m_roles;
-  QHash<QByteArray, QSharedPointer<Account>> m_accounts;
+  QHash<QUuid, QSharedPointer<Channel>> m_channels;
+  QHash<QUuid, QSharedPointer<Role>> m_roles;
+  QHash<QUuid, QSharedPointer<Account>> m_accounts;
 
 public:
   QVariantMap to_variantmap() const;

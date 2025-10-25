@@ -178,7 +178,7 @@ namespace irc {
     return g::irc_motd;
   }
 
-  void ThreadedServer::reloadMotd() {
+  void ThreadedServer::reloadMotd() const {
     g::irc_motd_path.refresh();
     const QFileInfo &fileInfo = g::irc_motd_path;
 

@@ -29,28 +29,23 @@ Ctx::Ctx() {
   g::mainThread = QCoreApplication::instance()->thread();
 
   const bool preload = true;
-  if (preload)
-    QFile::remove(g::pathDatabase.filePath());
 
   // database
-  if(!SQL::initialize()) {
-    const auto msg = QString("Cannot open db at %1").arg(g::pathDatabase.filePath());
-    throw std::runtime_error(msg.toStdString());
+  if (preload) {
+    sql::create_schema();
+    sql::preload_from_file(g::pathDatabasePreload.filePath());
   }
-
-  if (preload)
-    SQL::preload_from_file(g::pathDatabasePreload.filePath());
 
   // initial loading into memory: accounts & channels
   CLOCK_MEASURE_START(start_init_db_preload);
-  auto _channels = SQL::channel_get_all();
+  auto _channels = sql::channel_get_all();
   for (auto const& channel : _channels) {
     channels[channel->name()] = channel;
-    const auto accounts_channels = SQL::channel_get_members(channel->uid);
+    const auto accounts_channels = sql::channel_get_members(channel->uid);
     channel->addMembers(accounts_channels);
   }
 
-  SQL::account_get_all();  // trigger cache insertion
+  sql::account_get_all();  // trigger cache insertion
   CLOCK_MEASURE_END(start_init_db_preload, "initial db load");
 
   // irc/ws server - threadpool 4, max 5 connections per IP
@@ -101,6 +96,26 @@ Ctx::Ctx() {
   } else {
     qInfo("WS server listening on port %hu", g::wsServerListeningPort);
   }
+
+  // message insertions
+  m_insertTimer = new QTimer(this);
+  m_insertTimer->setInterval(1000);
+  // @TODO: not used atm., but can be used for events that do not require an immediate return (not QEventMessage)
+  // connect(m_insertTimer, &QTimer::timeout, this, [this] {
+  //   QSet<QSharedPointer<QEventMessage>> msgs;
+  //   QReadLocker rlock(&mtx_messageInsertion);
+  //   if (m_messageInsertionQueue.isEmpty())
+  //     return;
+  //
+  //   for (const auto& msg : m_messageInsertionQueue)
+  //     msgs << msg;
+  //
+  //   m_messageInsertionQueue.clear();
+  //   rlock.unlock();
+  //
+  //   SQL::insert_messages(msgs);
+  // });
+  // m_insertTimer->start();
 }
 
 bool Ctx::account_username_exists(const QByteArray &username) const {
@@ -148,14 +163,14 @@ void Ctx::account_insert_cache(const QSharedPointer<Account>& ptr) {
     accounts_lookup_name[ptr->name()] = ptr;
 }
 
-QList<QVariantMap> Ctx::getAccountsByUUIDs(const QList<QByteArray> &uuids) const {
+QList<QVariantMap> Ctx::getAccountsByUUIDs(const QList<QUuid> &uuids) const {
   QList<QVariantMap> result;
   QReadLocker locker(&mtx_cache);
   for (const auto &uuid : uuids) {
     if (accounts_lookup_uuid.contains(uuid)) {
       const QSharedPointer<Account> acc = accounts_lookup_uuid[uuid];
       QVariantMap map;
-      map["uuid"] = QString(acc->uid());
+      map["uuid"] = acc->uid();
       map["name"] = QString(acc->name());
       result.append(map);
     }
@@ -163,19 +178,21 @@ QList<QVariantMap> Ctx::getAccountsByUUIDs(const QList<QByteArray> &uuids) const
   return result;
 }
 
-QList<QVariantMap> Ctx::getChannelsByUUIDs(const QList<QByteArray> &uuids) const {
-  QList<QVariantMap> result;
-  QReadLocker locker(&mtx_cache);
-  for (const auto &uuid : uuids) {
-    if (channels.contains(uuid)) {
-      const QSharedPointer<Channel> ch = channels[uuid];
-      QVariantMap map;
-      map["uuid"] = QString(ch->uid);
-      map["name"] = QString(ch->name());
-      result.append(map);
-    }
-  }
-  return result;
+QList<QVariantMap> Ctx::getChannelsByUUIDs(const QList<QUuid> &uuids) const {
+  return {};
+  // QList<QVariantMap> result;
+  // QReadLocker locker(&mtx_cache);
+  //
+  // for (const auto &uuid : uuids) {
+  //   if (channels.contains(uuid)) {
+  //     const QSharedPointer<Channel> ch = channels[uuid];
+  //     QVariantMap map;
+  //     map["uuid"] = QString(ch->uid);
+  //     map["name"] = QString(ch->name());
+  //     result.append(map);
+  //   }
+  // }
+  // return result;
 }
 
 void Ctx::createDefaultFiles() {
@@ -342,4 +359,9 @@ void onChannelMemberJoinedFailed(const QSharedPointer<Account> &account) {
 
 }
 
-Ctx::~Ctx() {}
+void Ctx::queueMessageForInsert(const QSharedPointer<QEventMessage>& msg) {
+  QWriteLocker wlock(&mtx_messageInsertion);
+  m_messageInsertionQueue.insert(msg);
+}
+
+Ctx::~Ctx() = default;

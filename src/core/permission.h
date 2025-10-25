@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QByteArray>
+#include <QUuid>
 #include <QDateTime>
 #include <QReadWriteLock>
 #include <QSharedPointer>
@@ -25,21 +26,21 @@ class Permission final : public QObject {
   explicit Permission(QObject *parent = nullptr);
 
   static QSharedPointer<Permission> create_from_db(
-      const QByteArray &id,
-      const QByteArray &role_id,
+      const QUuid &id,
+      const QUuid &role_id,
       int permission_bits,
       const QDateTime &creation = QDateTime::currentDateTime());
 
   static QSharedPointer<Permission> create();
 
-  static QSharedPointer<Permission> get_by_uid(const QByteArray &uid);
+  static QSharedPointer<Permission> get_by_uid(const QUuid &uid);
 
-  void setUID(const QByteArray &uid);
-  QByteArray uid() const;
+  void setUID(const QUuid &uid);
+  QUuid uid() const;
   QByteArray uid_str() const { return m_uid_str; }
 
-  QByteArray role_uid() const;
-  void setRoleUID(const QByteArray &role_uid);
+  QUuid role_uid() const;
+  void setRoleUID(const QUuid &role_uid);
 
   PermissionFlags flags() const;
   void setFlags(PermissionFlags flags);
@@ -52,8 +53,8 @@ class Permission final : public QObject {
 private:
   mutable QReadWriteLock mtx_lock;
 
-  QByteArray m_uid;
+  QUuid m_uid;
   QByteArray m_uid_str;
-  QByteArray m_role_uid;
+  QUuid m_role_uid;
   PermissionFlags m_flags;
 };

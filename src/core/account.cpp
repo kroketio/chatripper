@@ -16,12 +16,11 @@ Account::Account(const QByteArray& account_name, QObject* parent) : m_nick(accou
 
 void Account::setRandomUID() {
   QWriteLocker locker(&mtx_lock);
-  if (!m_uid.isEmpty())
+  if (!m_uid.isNull())
     throw std::runtime_error("Random UID should be empty");
 
-  const QUuid uuid = QUuid::createUuid();
-  m_uid = uuid.toRfc4122();
-  m_uid_str = Utils::uuidBytesToString(m_uid).toUtf8();
+  m_uid = QUuid::createUuid();
+  m_uid_str = m_uid.toString(QUuid::WithoutBraces).toUtf8();
 }
 
 QSharedPointer<QEventAuthUser> Account::verifyPassword(const QSharedPointer<QEventAuthUser> &auth) const {
@@ -62,7 +61,7 @@ QSharedPointer<Account> Account::create() {
   return account;
 }
 
-QSharedPointer<Account> Account::create_from_db(const QByteArray &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation) {
+QSharedPointer<Account> Account::create_from_db(const QUuid &id, const QByteArray &username, const QByteArray &password, const QDateTime &creation) {
   if (const auto ptr = get_by_name(username); !ptr.isNull())
     return ptr;
 
@@ -96,15 +95,15 @@ void Account::setName(const QByteArray &name) {
   m_name = name;
 }
 
-QByteArray Account::uid() {
+QUuid Account::uid() const {
   QReadLocker locker(&mtx_lock);
   return m_uid;
 }
 
-void Account::setUID(const QByteArray &uid) {
+void Account::setUID(const QUuid &uid) {
   QWriteLocker locker(&mtx_lock);
   m_uid = uid;
-  m_uid_str = Utils::uuidBytesToString(m_uid).toUtf8();
+  m_uid_str = uid.toString(QUuid::WithoutBraces).toUtf8();
 }
 
 QByteArray Account::password() {
@@ -258,7 +257,7 @@ void Account::clearConnections() {
   connections.clear();
 }
 
-QSharedPointer<Account> Account::get_by_uid(const QByteArray &uid) {
+QSharedPointer<Account> Account::get_by_uid(const QUuid &uid) {
   QReadLocker locker(&g::ctx->mtx_cache);
   return g::ctx->accounts_lookup_uuid.value(uid);
 }
@@ -297,7 +296,7 @@ QVariantMap Account::to_variantmap() const {
   QReadLocker locker(&mtx_lock);
 
   QVariantMap map;
-  map["uid"] = QString::fromUtf8(m_uid);
+  map["uid"] = m_uid;
   map["name"] = QString::fromUtf8(m_name);
   map["nick"] = QString::fromUtf8(m_nick);
   map["host"] = QString::fromUtf8(m_host.isEmpty() ? g::defaultHost : m_host);
@@ -307,7 +306,7 @@ QVariantMap Account::to_variantmap() const {
   QVariantList channelList;
   for (auto it = channels.begin(); it != channels.end(); ++it) {
     if (it.value()) {
-      channelList.append(QString::fromUtf8(it.value()->uid));
+      channelList.append(it.value()->uid);
     }
   }
 
@@ -336,7 +335,7 @@ rapidjson::Value Account::to_rapidjson(rapidjson::Document::AllocatorType& alloc
     rapidjson::Value channelsArray(rapidjson::kArrayType);
     for (auto it = channels.begin(); it != channels.end(); ++it) {
       if (it.value()) {
-        channelsArray.PushBack(rapidjson::Value(it.value()->uid.constData(), allocator), allocator);
+        channelsArray.PushBack(rapidjson::Value(it.value()->uid_str.constData(), allocator), allocator);
       }
     }
     obj.AddMember("channels", channelsArray, allocator);

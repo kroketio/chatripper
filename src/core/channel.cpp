@@ -16,7 +16,7 @@ bool Channel::has(const QByteArray &username) const {
 }
 
 QSharedPointer<Channel> Channel::create_from_db(
-  const QByteArray &id,
+  const QUuid &id,
   const QByteArray &name,
   const QByteArray &topic,
   const QSharedPointer<Account> &owner,
@@ -33,7 +33,7 @@ QSharedPointer<Channel> Channel::create_from_db(
     channel->moveToThread(g::mainThread);
 
   channel->uid = id;
-  channel->uid_str = Utils::uuidBytesToString(id).toUtf8();
+  channel->uid_str = id.toString(QUuid::WithoutBraces).toUtf8();
   channel->setName(name);
   if (!owner.isNull())
     channel->setAccountOwner(owner);
@@ -232,6 +232,8 @@ void Channel::message(QSharedPointer<QEventMessage> &message) {
       return;
     }
   }
+
+  sql::insert_message(message);
 
   QReadLocker locker(&mtx_lock);
   for (const auto&member: m_members) {

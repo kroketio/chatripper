@@ -26,13 +26,13 @@ Q_PROPERTY(QByteArray topic READ topic WRITE setTopic NOTIFY topicChanged)
 Q_PROPERTY(QByteArray key READ key WRITE setKey NOTIFY keyChanged)
 Q_PROPERTY(int limit READ limit)
 Q_PROPERTY(QDateTime date_creation MEMBER date_creation)
-Q_PROPERTY(QByteArray uid MEMBER uid)
+Q_PROPERTY(QUuid uid MEMBER uid)
 Q_PROPERTY(QByteArray uid_str MEMBER uid_str)
 
 public:
   explicit Channel(const QByteArray &name, QObject *parent = nullptr);
   static QSharedPointer<Channel> create_from_db(
-    const QByteArray &id,
+    const QUuid &id,
     const QByteArray &name,
     const QByteArray &topic,
     const QSharedPointer<Account> &owner,
@@ -81,7 +81,7 @@ public:
   QList<QByteArray> banList() const;
   int limit() const { return m_limit; }
 
-  QByteArray uid;
+  QUuid uid;
   QByteArray uid_str;
   QDateTime date_creation;
 
@@ -118,11 +118,11 @@ public:
     QReadLocker locker(&mtx_lock);
     QVariantMap obj;
 
-    obj["uid"] = QString::fromUtf8(uid);
+    obj["uid"] = uid_str;
     obj["name"] = QString::fromUtf8(m_name);
     obj["topic"] = QString::fromUtf8(m_topic);
     obj["key"] = QString::fromUtf8(m_key);
-    obj["owner"] = m_owner.isNull() ? QVariant() : QString::fromUtf8(m_owner->uid());
+    obj["owner"] = m_owner.isNull() ? QVariant() : m_owner->uid();
     obj["limit"] = m_limit;
     obj["date_creation"] = date_creation.toString(Qt::ISODate);
 
@@ -130,7 +130,7 @@ public:
     QVariantList membersArray;
     for (const auto &member : m_members) {
       if (member) {
-        membersArray.append(QString::fromUtf8(member->uid()));
+        membersArray.append(member->uid());
       }
     }
     obj["members"] = membersArray;

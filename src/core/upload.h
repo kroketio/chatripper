@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QByteArray>
+#include <QUuid>
 #include <QDateTime>
 #include <QReadWriteLock>
 #include <QSharedPointer>
@@ -15,22 +16,22 @@ class Upload final : public QObject {
   explicit Upload(QObject *parent = nullptr);
 
   static QSharedPointer<Upload> create_from_db(
-      const QByteArray &id,
-      const QByteArray &account_owner_id,
+      const QUuid &id,
+      const QUuid &account_owner_id,
       const QString &path,
       int type,
       int variant,
       const QDateTime &creation);
-  static QSharedPointer<Upload> get_by_uid(const QByteArray &uid);
+  static QSharedPointer<Upload> get_by_uid(const QUuid &uid);
 
   static QSharedPointer<Upload> create();
 
-  void setUID(const QByteArray &uid);
-  QByteArray uid() const;
+  void setUID(const QUuid &uid);
+  QUuid uid() const;
   QByteArray uid_str() const { return m_uid_str; }
 
-  QByteArray owner_uid() const;
-  void setOwnerUID(const QByteArray &owner_uid);
+  QUuid owner_uid() const;
+  void setOwnerUID(const QUuid &owner_uid);
 
   QString path() const;
   void setPath(const QString &path);
@@ -49,9 +50,9 @@ class Upload final : public QObject {
 private:
   mutable QReadWriteLock mtx_lock;
 
-  QByteArray m_uid;
+  QUuid m_uid;
   QByteArray m_uid_str;
-  QByteArray m_owner_uid;
+  QUuid m_owner_uid;
   QString m_path;
   int m_type;
   int m_variant;

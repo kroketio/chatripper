@@ -15,14 +15,14 @@ QSharedPointer<Upload> Upload::create() {
   return upload;
 }
 
-QSharedPointer<Upload> Upload::get_by_uid(const QByteArray &uid) {
+QSharedPointer<Upload> Upload::get_by_uid(const QUuid &uid) {
   QReadLocker locker(&g::ctx->mtx_cache);
   return g::ctx->uploads_lookup_uuid.value(uid);
 }
 
 QSharedPointer<Upload> Upload::create_from_db(
-    const QByteArray &id,
-    const QByteArray &account_owner_id,
+    const QUuid &id,
+    const QUuid &account_owner_id,
     const QString &path,
     int type,
     int variant,
@@ -45,23 +45,23 @@ QSharedPointer<Upload> Upload::create_from_db(
   return upload;
 }
 
-void Upload::setUID(const QByteArray &uid) {
+void Upload::setUID(const QUuid &uid) {
   QWriteLocker locker(&mtx_lock);
   m_uid = uid;
-  m_uid_str = Utils::uuidBytesToString(uid).toUtf8();
+  m_uid_str = uid.toString(QUuid::WithoutBraces).toUtf8();
 }
 
-QByteArray Upload::uid() const {
+QUuid Upload::uid() const {
   QReadLocker locker(&mtx_lock);
   return m_uid;
 }
 
-QByteArray Upload::owner_uid() const {
+QUuid Upload::owner_uid() const {
   QReadLocker locker(&mtx_lock);
   return m_owner_uid;
 }
 
-void Upload::setOwnerUID(const QByteArray &owner_uid) {
+void Upload::setOwnerUID(const QUuid &owner_uid) {
   QWriteLocker locker(&mtx_lock);
   m_owner_uid = owner_uid;
 }
@@ -99,8 +99,8 @@ void Upload::setVariant(int variant) {
 QVariantMap Upload::to_variantmap() const {
   QReadLocker locker(&mtx_lock);
   QVariantMap map;
-  map["uid"] = QString::fromUtf8(m_uid);
-  map["owner_uid"] = QString::fromUtf8(m_owner_uid);
+  map["uid"] = m_uid;
+  map["owner_uid"] = m_owner_uid;
   map["path"] = m_path;
   map["type"] = m_type;
   map["variant"] = m_variant;
@@ -112,7 +112,7 @@ rapidjson::Value Upload::to_rapidjson(rapidjson::Document::AllocatorType &alloca
   QReadLocker locker(&mtx_lock);
   rapidjson::Value obj(rapidjson::kObjectType);
   obj.AddMember("uid", rapidjson::Value(m_uid_str.constData(), allocator), allocator);
-  obj.AddMember("owner_uid", rapidjson::Value(m_owner_uid.constData(), allocator), allocator);
+  obj.AddMember("owner_uid", rapidjson::Value(m_owner_uid.toString(QUuid::WithoutBraces).toUtf8().constData(), allocator), allocator);
   obj.AddMember("path", rapidjson::Value(m_path.toUtf8().constData(), allocator), allocator);
   obj.AddMember("type", m_type, allocator);
   obj.AddMember("variant", m_variant, allocator);

@@ -50,7 +50,7 @@ public:
 
   QSet<QSharedPointer<Account>> accounts;
   QHash<QByteArray, QSharedPointer<Account>> accounts_lookup_name;
-  QHash<QByteArray, QSharedPointer<Account>> accounts_lookup_uuid;
+  QHash<QUuid, QSharedPointer<Account>> accounts_lookup_uuid;
   void account_insert_cache(const QSharedPointer<Account>& ptr);
   void account_remove_cache(const QSharedPointer<Account>& ptr);
   bool account_username_exists(const QByteArray& username) const;
@@ -61,28 +61,31 @@ public:
   // servers
   QSet<QSharedPointer<Server>> servers;
   QHash<QByteArray, QSharedPointer<Server>> servers_lookup_name;
-  QHash<QByteArray, QSharedPointer<Server>> servers_lookup_uuid;
+  QHash<QUuid, QSharedPointer<Server>> servers_lookup_uuid;
   void server_insert_cache(const QSharedPointer<Server>& ptr);
   void server_remove_cache(const QSharedPointer<Server>& ptr);
 
   // roles
   QSet<QSharedPointer<Role>> roles;
   QHash<QByteArray, QSharedPointer<Role>> roles_lookup_name;
-  QHash<QByteArray, QSharedPointer<Role>> roles_lookup_uuid;
+  QHash<QUuid, QSharedPointer<Role>> roles_lookup_uuid;
   void role_insert_cache(const QSharedPointer<Role>& ptr);
   void role_remove_cache(const QSharedPointer<Role>& ptr);
 
   // uploads
   QSet<QSharedPointer<Upload>> uploads;
-  QHash<QByteArray, QSharedPointer<Upload>> uploads_lookup_uuid;
+  QHash<QUuid, QSharedPointer<Upload>> uploads_lookup_uuid;
   void upload_insert_cache(const QSharedPointer<Upload>& ptr);
   void upload_remove_cache(const QSharedPointer<Upload>& ptr);
 
   // permissions
   QSet<QSharedPointer<Permission>> permissions;
-  QHash<QByteArray, QSharedPointer<Permission>> permissions_lookup_uuid;
+  QHash<QUuid, QSharedPointer<Permission>> permissions_lookup_uuid;
   void permission_insert_cache(const QSharedPointer<Permission>& ptr);
   void permission_remove_cache(const QSharedPointer<Permission>& ptr);
+
+  // messages
+  void queueMessageForInsert(const QSharedPointer<QEventMessage>& msg);
 
   // need to keep track of nicks too, as on IRC they are unique
   // they need to be lowercase
@@ -95,8 +98,8 @@ public:
     return g::ctx;
   }
 
-  QList<QVariantMap> getAccountsByUUIDs(const QList<QByteArray> &uuids) const;
-  QList<QVariantMap> getChannelsByUUIDs(const QList<QByteArray> &uuids) const;
+  QList<QVariantMap> getAccountsByUUIDs(const QList<QUuid> &uuids) const;
+  QList<QVariantMap> getChannelsByUUIDs(const QList<QUuid> &uuids) const;
 
 signals:
   void applicationLog(const QString &msg);
@@ -109,6 +112,10 @@ private slots:
 private:
   QThread* m_web_thread = nullptr;
   QFileInfo m_path_db;
+
+  QReadWriteLock mtx_messageInsertion;
+  QSet<QSharedPointer<QEventMessage>> m_messageInsertionQueue;
+  QTimer* m_insertTimer;
 
   static void createConfigDirectory(const QStringList &lst);
   static void createDefaultFiles();

@@ -17,12 +17,12 @@ QSharedPointer<Role> Role::create() {
 }
 
 QSharedPointer<Role> Role::create_from_db(
-    const QByteArray &id,
-    const QByteArray &server_id,
+    const QUuid &id,
+    const QUuid &server_id,
     const QByteArray &name,
-    const QByteArray &icon,
-    int color,
-    int priority,
+    const QUuid &icon,
+    const int color,
+    const int priority,
     const QDateTime &creation) {
   if (const auto ptr = get_by_uid(id); !ptr.isNull())
     return ptr;
@@ -43,13 +43,13 @@ QSharedPointer<Role> Role::create_from_db(
   return role;
 }
 
-void Role::setUID(const QByteArray &uid) {
+void Role::setUID(const QUuid &uid) {
   QWriteLocker locker(&mtx_lock);
   m_uid = uid;
-  m_uid_str = Utils::uuidBytesToString(uid).toUtf8();
+  m_uid_str = uid.toString(QUuid::WithoutBraces).toUtf8();
 }
 
-QByteArray Role::uid() const {
+QUuid Role::uid() const {
   QReadLocker locker(&mtx_lock);
   return m_uid;
 }
@@ -64,22 +64,22 @@ void Role::setName(const QByteArray &name) {
   m_name = name;
 }
 
-QByteArray Role::server_uid() const {
+QUuid Role::server_uid() const {
   QReadLocker locker(&mtx_lock);
   return m_server_uid;
 }
 
-void Role::setServerUID(const QByteArray &server_uid) {
+void Role::setServerUID(const QUuid &server_uid) {
   QWriteLocker locker(&mtx_lock);
   m_server_uid = server_uid;
 }
 
-QByteArray Role::icon_uid() const {
+QUuid Role::icon_uid() const {
   QReadLocker locker(&mtx_lock);
   return m_icon_uid;
 }
 
-void Role::setIconUID(const QByteArray &icon_uid) {
+void Role::setIconUID(const QUuid &icon_uid) {
   QWriteLocker locker(&mtx_lock);
   m_icon_uid = icon_uid;
 }
@@ -104,7 +104,7 @@ void Role::setPriority(int priority) {
   m_priority = priority;
 }
 
-QSharedPointer<Role> Role::get_by_uid(const QByteArray &uid) {
+QSharedPointer<Role> Role::get_by_uid(const QUuid &uid) {
   QReadLocker locker(&g::ctx->mtx_cache);
   return g::ctx->roles_lookup_uuid.value(uid);
 }
@@ -121,10 +121,10 @@ Role::~Role() {
 QVariantMap Role::to_variantmap() const {
   QReadLocker locker(&mtx_lock);
   QVariantMap map;
-  map["uid"] = QString::fromUtf8(m_uid);
+  map["uid"] = m_uid;
   map["name"] = QString::fromUtf8(m_name);
-  map["server_uid"] = QString::fromUtf8(m_server_uid);
-  map["icon_uid"] = QString::fromUtf8(m_icon_uid);
+  map["server_uid"] = m_server_uid;
+  map["icon_uid"] = m_icon_uid;
   map["color"] = m_color;
   map["priority"] = m_priority;
   map["creation_date"] = creation_date.toString(Qt::ISODate);
@@ -136,11 +136,10 @@ rapidjson::Value Role::to_rapidjson(rapidjson::Document::AllocatorType &allocato
   rapidjson::Value obj(rapidjson::kObjectType);
   obj.AddMember("uid", rapidjson::Value(m_uid_str.constData(), allocator), allocator);
   obj.AddMember("name", rapidjson::Value(m_name.constData(), allocator), allocator);
-  obj.AddMember("server_uid", rapidjson::Value(m_server_uid.constData(), allocator), allocator);
-  obj.AddMember("icon_uid", rapidjson::Value(m_icon_uid.constData(), allocator), allocator);
+  obj.AddMember("server_uid", rapidjson::Value(m_server_uid.toString(QUuid::WithoutBraces).toUtf8().constData(), allocator), allocator);
+  obj.AddMember("icon_uid", rapidjson::Value(m_icon_uid.toString(QUuid::WithoutBraces).toUtf8().constData(), allocator), allocator);
   obj.AddMember("color", m_color, allocator);
   obj.AddMember("priority", m_priority, allocator);
-  obj.AddMember("creation_date", rapidjson::Value(creation_date.toString(Qt::ISODate).toUtf8().constData(), allocator),
-                allocator);
+  obj.AddMember("creation_date", rapidjson::Value(creation_date.toString(Qt::ISODate).toUtf8().constData(), allocator), allocator);
   return obj;
 }

@@ -379,7 +379,7 @@ static PyObject *py_get_accounts(PyObject *self, PyObject *args) {
     return nullptr;
   }
 
-  QList<QByteArray> uuids;
+  QList<QUuid> uuids;
   Py_ssize_t len = PyList_Size(pyList);
   for (Py_ssize_t i = 0; i < len; ++i) {
     PyObject *item = PyList_GetItem(pyList, i);
@@ -387,7 +387,7 @@ static PyObject *py_get_accounts(PyObject *self, PyObject *args) {
       PyErr_SetString(PyExc_TypeError, "UUIDs must be strings");
       return nullptr;
     }
-    uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
+    uuids.append(QUuid(PyUnicode_AsUTF8(item)));
   }
 
   QList<QVariantMap> accounts = g::ctx->getAccountsByUUIDs(uuids);
@@ -439,7 +439,7 @@ static PyObject *py_get_channels(PyObject *self, PyObject *args) {
     return nullptr;
   }
 
-  QList<QByteArray> uuids;
+  QList<QUuid> uuids;
   Py_ssize_t len = PyList_Size(pyList);
   for (Py_ssize_t i = 0; i < len; ++i) {
     PyObject *item = PyList_GetItem(pyList, i);
@@ -447,7 +447,7 @@ static PyObject *py_get_channels(PyObject *self, PyObject *args) {
       PyErr_SetString(PyExc_TypeError, "UUIDs must be strings");
       return nullptr;
     }
-    uuids.append(QByteArray(PyUnicode_AsUTF8(item)));
+    uuids.append(QUuid(PyUnicode_AsUTF8(item)));
   }
 
   QList<QVariantMap> channels = g::ctx->getChannelsByUUIDs(uuids);

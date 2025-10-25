@@ -40,7 +40,7 @@ namespace irc {
     void incomingConnection(qintptr socketDescriptor) override;
 
   private:
-    void reloadMotd();
+    void reloadMotd() const;
     void setup_pool(int thread_count);
 
     int m_max_per_ip;
