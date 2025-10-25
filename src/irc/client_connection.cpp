@@ -188,23 +188,25 @@ namespace irc {
       return;
     }
 
-    if (capabilities.has(PROTOCOL_CAPABILITY::METADATA))
+    if (!capabilities.has(PROTOCOL_CAPABILITY::METADATA))
       return;
 
     const QByteArray& target = args[0];
     const QByteArray& subcmd = args[1];
+    if (subcmd == "SYNC")
+      int we = 1;
     if (subcmd == "LIST" && target == "dsc")
       int e = 1;
 
-    QList<QByteArray> sub_args = args.mid(2);
+    const QList<QByteArray> sub_args = args.mid(2);
 
-    auto event = QSharedPointer<QEventMetadata>::create();
+    const auto event = QSharedPointer<QEventMetadata>::create();
     event->account = m_account;
     event->subcmd = subcmd;
     event->args = sub_args;
 
     if (target.startsWith('#')) {
-      auto chan = Channel::get(target.mid(1));
+      const auto chan = Channel::get(target.mid(1));
       if (chan.isNull()) {
         send_raw("401 " + nick() + " " + target + " :No such nick/channel");
         return;
@@ -530,10 +532,17 @@ namespace irc {
 void client_connection::metadata(const QSharedPointer<QEventMetadata> &event) {
   QByteArrayList msg;
   const QByteArray serverPrefix = ":" + ThreadedServer::serverName();
-  const QByteArray targetName =
-    event->isAccount() ? event->dest->nick()
-    : event->isChannel() ? "#" + event->channel->name()
-    : "*";
+  QByteArray targetName;
+  if (event->isAccount()) {
+    if (event->account == m_account)
+      targetName = "*";
+    else
+      targetName = event->dest->nick();
+  } else if (event->isChannel()) {
+    targetName = "#" + event->channel->name();
+  } else {
+    targetName = "*";
+  }
 
   // Handle error codes first
   if (!event->error_code.isEmpty()) {
@@ -549,7 +558,7 @@ void client_connection::metadata(const QSharedPointer<QEventMetadata> &event) {
 
   const QString cmd = QString::fromUtf8(event->subcmd).toUpper();
 
-  // GET, LIST, SYNC → batch wrapped
+  // GET, LIST, SYNC -> batch wrapped
   if (cmd == "GET" || cmd == "LIST" || cmd == "SYNC") {
     const QByteArray batchRef = generateBatchRef();
     // Start batch

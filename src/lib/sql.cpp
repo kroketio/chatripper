@@ -16,16 +16,15 @@ namespace sql {
   std::unordered_map<unsigned long, QSqlDatabase*> DB_INSTANCES = {};
 
   // each thread has its own database connection
-  QSharedPointer<QSqlQuery> getQuery() {
+  QSqlDatabase& ensureThreadDatabase() {
     const unsigned long thread_id = reinterpret_cast<uintptr_t>(QThread::currentThreadId());
-    const auto it = DB_INSTANCES.find(thread_id);
+    auto it = DB_INSTANCES.find(thread_id);
     if (it != DB_INSTANCES.end()) {
-      const QSqlDatabase* db = it->second;
-      return QSharedPointer<QSqlQuery>(new QSqlQuery(*db));
+      return *(it->second);
     }
 
     const QString connection_name = "cr_" + QString::number(thread_id);
-    auto* db = new QSqlDatabase(QSqlDatabase::addDatabase("QPSQL", connection_name));
+    QSqlDatabase* db = new QSqlDatabase(QSqlDatabase::addDatabase("QPSQL", connection_name));
     db->setConnectOptions(QString("application_name=%1").arg(connection_name));
     db->setHostName(g::pgHost);
     db->setPort(g::pgPort);
@@ -40,7 +39,16 @@ namespace sql {
     qDebug() << "db: created connection" << connection_name;
 
     DB_INSTANCES[thread_id] = db;
-    return QSharedPointer<QSqlQuery>(new QSqlQuery(*db));
+    return *db;
+  }
+
+  QSharedPointer<QSqlQuery> getQuery() {
+    const QSqlDatabase& db = ensureThreadDatabase();
+    return QSharedPointer<QSqlQuery>(new QSqlQuery(db));
+  }
+
+  QSqlDatabase& getDatabaseForThread() {
+    return ensureThreadDatabase();
   }
 
   QSharedPointer<QSqlQuery> exec(const QString &sql) {
@@ -211,17 +219,26 @@ namespace sql {
     )
     )");
 
+    // enum: metadata:ref_type
     exec(R"(
-    CREATE TYPE ref_type_enum AS ENUM ('channel', 'account');
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ref_type_enum') THEN
+        CREATE TYPE ref_type_enum AS ENUM ('channel', 'account');
+      END IF;
+    END$$;
+    )");
 
+    exec(R"(
     CREATE TABLE IF NOT EXISTS metadata (
       id UUID PRIMARY KEY,
       key TEXT NOT NULL,
-      value TEXT NOT NULL,
+      value BYTEA NOT NULL,
       ref_id UUID NOT NULL,
       ref_type ref_type_enum NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT metadata_ref_key_unique UNIQUE (ref_id, key)
     )
     )");
 
@@ -315,7 +332,7 @@ namespace sql {
 
     q->addBindValue(uuid);                     // id
     q->addBindValue(QString::fromUtf8(key));   // key
-    q->addBindValue(QString::fromUtf8(value)); // value
+    q->addBindValue(value);                    // value
     q->addBindValue(ref_id);                   // ref_id
 
     // enum
@@ -374,7 +391,7 @@ namespace sql {
     return result;
   }
 
-  bool metadata_remove(QUuid ref_id, const QByteArray& key) {
+  bool metadata_remove(const QByteArray& key, QUuid ref_id) {
     const auto q = getQuery();
 
     q->prepare(R"(
@@ -383,7 +400,7 @@ namespace sql {
     )");
 
     q->addBindValue(ref_id);
-    q->addBindValue(QString::fromUtf8(key));
+    q->addBindValue(key);
 
     if (!q->exec()) {
       qWarning() << "Failed to remove metadata:" << q->lastError().text();
@@ -402,12 +419,46 @@ namespace sql {
     WHERE ref_id = ? AND key = ?
   )");
 
-    q->addBindValue(QString::fromUtf8(new_value));
+    q->addBindValue(new_value);
     q->addBindValue(ref_id);
     q->addBindValue(QString::fromUtf8(key));
 
     if (!q->exec()) {
       qWarning() << "Failed to modify metadata:" << q->lastError().text();
+      return false;
+    }
+
+    return true;
+  }
+
+  bool metadata_upsert(const QByteArray& key, const QByteArray& value, QUuid ref_id, RefType ref_type) {
+    const auto q = getQuery();
+
+    q->prepare(R"(
+      INSERT INTO metadata (id, key, value, ref_id, ref_type)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (ref_id, key)
+      DO UPDATE SET
+        value = EXCLUDED.value,
+        modified_at = CURRENT_TIMESTAMP
+    )");
+
+    const auto uuid = QUuid::createUuid();
+
+    q->addBindValue(uuid);                          // id
+    q->addBindValue(QString::fromUtf8(key));        // key
+    q->addBindValue(value);                         // value
+    q->addBindValue(ref_id);                        // ref_id
+
+    QString ref_type_str;
+    switch (ref_type) {
+      case RefType::Channel: ref_type_str = "channel"; break;
+      case RefType::Account: ref_type_str = "account"; break;
+    }
+    q->addBindValue(ref_type_str);                  // ref_type
+
+    if (!q->exec()) {
+      qWarning() << "Failed to upsert metadata:" << q->lastError().text();
       return false;
     }
 
@@ -449,9 +500,198 @@ namespace sql {
     return true;
   }
 
+  bool metadata_subscribe_bulk(QUuid ref_id, const QList<QByteArray>& keys, QUuid account_id) {
+    if (keys.isEmpty())
+      return false;
+
+    constexpr int INSERT_BATCH_SIZE = 500;
+
+    QSqlDatabase& db = ensureThreadDatabase();
+    db.transaction();
+
+    // resolve metadata IDs for all keys
+    QMap<QByteArray, QUuid> keyToMetadataId;
+    {
+      QStringList keyStrings;
+      for (const auto& k : keys)
+        keyStrings << QString::fromUtf8(k);
+
+      QStringList placeholders;
+      for (int i = 0; i < keyStrings.size(); ++i)
+        placeholders << "?";
+
+      const QString queryStr = QString(R"(
+        SELECT id, key FROM metadata
+        WHERE ref_id = ? AND key IN (%1)
+      )").arg(placeholders.join(", "));
+
+      auto q = getQuery();
+      q->prepare(queryStr);
+
+      q->addBindValue(ref_id);
+
+      for (const auto& key : keyStrings)
+        q->addBindValue(key);
+
+      if (!q->exec()) {
+        qWarning() << "Failed to resolve metadata IDs for bulk subscribe:" << q->lastError().text();
+        db.rollback();
+        return false;
+      }
+
+      while (q->next()) {
+        const auto key = q->value("key").toString().toUtf8();
+        const auto id = q->value("id").toUuid();
+        keyToMetadataId.insert(key, id);
+      }
+    }
+
+    if (keyToMetadataId.isEmpty()) {
+      qWarning() << "No metadata found for given keys in metadata_subscribe_bulk";
+      db.rollback();
+      return false;
+    }
+
+    // prepare bulk insert
+    const auto q = getQuery();
+    q->prepare(R"(
+      INSERT INTO metadata_subs (id, metadata_id, account_id)
+      VALUES (?, ?, ?)
+      ON CONFLICT (metadata_id, account_id) DO NOTHING
+    )");
+
+    QList<QVariant> ids, metadata_ids, account_ids;
+    int count = 0;
+    bool ok = true;
+
+    auto flush = [&]() {
+      if (ids.isEmpty())
+        return;
+
+      q->addBindValue(ids);
+      q->addBindValue(metadata_ids);
+      q->addBindValue(account_ids);
+
+      if (!q->execBatch()) {
+        qWarning() << "Failed to bulk insert metadata subscriptions:" << q->lastError().text();
+        ok = false;
+        return;
+      }
+
+      ids.clear();
+      metadata_ids.clear();
+      account_ids.clear();
+    };
+
+    for (const auto& k : keys) {
+      auto metadata_id = keyToMetadataId.value(k);
+      if (metadata_id.isNull())
+        continue;
+
+      ids << QUuid::createUuid();
+      metadata_ids << metadata_id;
+      account_ids << account_id;
+
+      count++;
+      if (count % INSERT_BATCH_SIZE == 0) {
+        flush();
+        if (!ok) {
+          db.rollback();
+          return false;
+        }
+      }
+    }
+
+    flush();
+    if (!ok) {
+      db.rollback();
+      return false;
+    }
+
+    db.commit();
+    return true;
+  }
+
+  bool metadata_unsubscribe_bulk(QUuid ref_id, const QList<QByteArray>& keys, QUuid account_id) {
+    if (keys.isEmpty())
+      return false;
+
+    QSqlDatabase db = ensureThreadDatabase();
+    db.transaction();
+
+    // resolve metadata IDs for the given keys
+    QMap<QByteArray, QUuid> keyToMetadataId;
+    {
+      const auto q = getQuery();
+      QStringList keyStrings;
+      for (const auto& k : keys)
+        keyStrings << QString::fromUtf8(k);
+
+      QStringList placeholders;
+      for (int i = 0; i < keyStrings.size(); ++i)
+        placeholders << "?";
+
+      QString queryStr = QString(R"(
+        SELECT id, key FROM metadata
+        WHERE ref_id = ? AND key IN (%1)
+      )").arg(placeholders.join(", "));
+
+      q->prepare(queryStr);
+      q->addBindValue(ref_id);
+
+      for (const auto& key : keyStrings)
+        q->addBindValue(key);
+
+      if (!q->exec()) {
+        qWarning() << "Failed to resolve metadata IDs for bulk unsubscribe:" << q->lastError().text();
+        db.rollback();
+        return false;
+      }
+
+      while (q->next()) {
+        const auto key = q->value("key").toString().toUtf8();
+        const auto id = q->value("id").toUuid();
+        keyToMetadataId.insert(key, id);
+      }
+    }
+
+    if (keyToMetadataId.isEmpty()) {
+      qWarning() << "No metadata found for given keys in metadata_unsubscribe_bulk";
+      db.rollback();
+      return false;
+    }
+
+    // delete subscriptions for the resolved metadata IDs
+    const auto q = getQuery();
+    QList<QUuid> metadataIds = keyToMetadataId.values();
+    QStringList placeholders;
+    for (int i = 0; i < metadataIds.size(); ++i)
+      placeholders << "?";
+
+    const QString queryStr = QString(R"(
+      DELETE FROM metadata_subs
+      WHERE account_id = ? AND metadata_id IN (%1)
+    )").arg(placeholders.join(", "));
+
+    q->prepare(queryStr);
+    q->addBindValue(account_id);
+
+    for (const auto& id : metadataIds)
+      q->addBindValue(id);
+
+    if (!q->exec()) {
+      qWarning() << "Failed to bulk unsubscribe metadata:" << q->lastError().text();
+      db.rollback();
+      return false;
+    }
+
+    db.commit();
+    return true;
+  }
+
   bool metadata_unsubscribe(QUuid ref_id, const QByteArray& key, QUuid account_id) {
     const auto q1 = getQuery();
-      q1->prepare(R"(
+    q1->prepare(R"(
       SELECT id FROM metadata
       WHERE ref_id = ? AND key = ?
     )");
@@ -528,11 +768,11 @@ namespace sql {
 
     const auto q = getQuery();
     q->prepare(R"(
-    INSERT INTO messages (
-      id, account_id, channel_id, text, raw, tags,
-      nick, host, username, targets, from_system, tag_msg
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  )");
+      INSERT INTO messages (
+        id, account_id, channel_id, text, raw, tags,
+        nick, host, username, targets, from_system, tag_msg
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    )");
 
     QList<QVariant> ids, account_ids, channel_ids, texts, raws, tagss, nicks, hosts, users, targetss, from_systems, tag_msgs;
     int count = 0;
@@ -1283,17 +1523,17 @@ namespace sql {
 
     if (!q->exec()) {
       qCritical() << "insertLogin: query error" << q->lastError().text();
-      return DatabaseError;
+      return LoginResult::DatabaseError;
     }
 
     if (!q->next())
-      return AccountNotFound;
+      return LoginResult::AccountNotFound;
 
     const QUuid accountId = q->value("id").toUuid();
     const QString storedHash = q->value("password").toString();
 
     if (!validatePasswordBcrypt(password, storedHash))
-      return InvalidPassword;
+      return LoginResult::InvalidPassword;
 
     const auto q2 = getQuery();
     q2->prepare("INSERT INTO logins (id, account_id, ip) VALUES (?, ?, ?)");
@@ -1303,11 +1543,11 @@ namespace sql {
 
     if (!q2->exec()) {
       qCritical() << "insertLogin error:" << q2->lastError().text();
-      return DatabaseError;
+      return LoginResult::DatabaseError;
     }
 
     rtnAccountID = accountId;
-    return Success;
+    return LoginResult::Success;
   }
 
   // SELECT HELPERS

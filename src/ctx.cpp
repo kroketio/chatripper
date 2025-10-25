@@ -28,13 +28,11 @@ Ctx::Ctx() {
   g::defaultHost = "kroket.io";
   g::mainThread = QCoreApplication::instance()->thread();
 
-  const bool preload = true;
-
   // database
-  if (preload) {
-    sql::create_schema();
+  const bool preload = true;
+  sql::create_schema();
+  if (preload)
     sql::preload_from_file(g::pathDatabasePreload.filePath());
-  }
 
   // initial loading into memory: accounts & channels
   CLOCK_MEASURE_START(start_init_db_preload);

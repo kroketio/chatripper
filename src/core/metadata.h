@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QMap>
+#include <QReadWriteLock>
 #include <QSet>
 #include <QSharedPointer>
 #include <QVariant>
@@ -22,14 +23,14 @@ public:
   QMap<QString, QSet<QSharedPointer<Account>>> subscribers;
 
   // core
-  void set(const QString &key, const QVariant &value, const QSharedPointer<Account> &actor);
-  QVariant get(const QString &key) const;
+  void set(const QByteArray &key, const QByteArray &value);
+  bool remove(const QByteArray &key);
+  QVariant get(const QByteArray &key) const;
   QMap<QString, QVariant> list() const;
-  bool clear(const QString &key, const QSharedPointer<Account> &actor);
 
   // subs
-  void sub(const QSharedPointer<Account> &actor, const QList<QString> &keys);
-  void unsub(const QSharedPointer<Account> &actor, const QList<QString> &keys);
+  void sub(const QSharedPointer<Account> &actor, const QList<QByteArray> &keys);
+  void unsub(const QSharedPointer<Account> &actor, const QList<QByteArray> &keys);
   QSet<QString> subs(const QSharedPointer<Account> &actor) const;
 
   void handle(const QSharedPointer<QEventMetadata> &event);
@@ -38,6 +39,8 @@ public:
     void changed(const QString &key, const QVariant &value);
 
   private:
+    mutable QReadWriteLock mtx_lock;
     QSharedPointer<Account> m_account;
     QSharedPointer<Channel> m_channel;
+    QUuid ref_id() const;
 };

@@ -2,20 +2,65 @@
 #include "metadata.h"
 #include "core/account.h"
 #include "core/channel.h"
+#include "lib/sql.h"
 #include <QDebug>
 
 Metadata::Metadata(Account *account, QObject *parent) :
-  m_account(account), QObject(parent) {
+    m_account(account), QObject(parent) {
+  auto [keyValues, subs] = sql::metadata_get(account->uid());
+  kv = keyValues;
+  subscribers = subs;
 }
 
 Metadata::Metadata(Channel *channel, QObject *parent) :
-  m_channel(channel), QObject(parent) {
+    m_channel(channel), QObject(parent) {
+  auto [keyValues, subs] = sql::metadata_get(channel->uid);
+  kv = keyValues;
+  subscribers = subs;
 }
 
-void Metadata::set(const QString &key, const QVariant &value, const QSharedPointer<Account> &actor) {
+QVariant Metadata::get(const QByteArray &key) const {
+  QReadLocker rlock(&mtx_lock);
+  return kv.value(key, QVariant());
+}
+
+bool Metadata::remove(const QByteArray &key) {
+  QWriteLocker rlock(&mtx_lock);
+  kv.remove(key);
+
+  QUuid ref_id;
+  if (!m_account.isNull()) {
+    ref_id = m_account->uid();
+  } else {
+    ref_id = m_channel->uid;
+  }
+
+  sql::metadata_remove(key, ref_id);
+
+  emit changed(key, QVariant());
+  return true;
+}
+
+void Metadata::set(const QByteArray &key, const QByteArray &value) {
+  QWriteLocker wlock(&mtx_lock);
   kv[key] = value;
   emit changed(key, value);
-  // TODO: later: notify subscribers
+
+  QUuid ref_id;
+  sql::RefType ref_type;
+  if (!m_account.isNull()) {
+    ref_id = m_account->uid();
+    ref_type = sql::RefType::Account;
+  } else {
+    ref_id = m_channel->uid;
+    ref_type = sql::RefType::Channel;
+  }
+
+  metadata_upsert(key, value, ref_id, ref_type);
+
+  if (subscribers.contains(key)) {
+    // TODO: later: notify subscribers
+  }
 }
 
 void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
@@ -27,15 +72,18 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
     auto &key = args[0];
     auto &value = args[1];
 
-    if (event->account != m_account) {
+    if (!m_account.isNull() && !event->account.isNull() && event->account != m_account) {
       event->error_code = "KEY_NO_PERMISSION";
-      event->error_target = m_account ? m_account->nick() : ("#" + m_channel->name());
+      event->error_target = m_account->nick();
       event->error_key = key;
       return;
     }
 
-    kv[key] = value;
+    //  : ("#" + m_channel->name());
+
+    set(key, value);
     event->metadata[key] = value;
+
     return;
   }
 
@@ -43,20 +91,20 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
     if (args.isEmpty()) return;
     auto &key = args[0];
 
-    if (event->account != m_account) {
+    if (!m_account.isNull() && !event->account.isNull() && event->account != m_account) {
       event->error_code = "KEY_NO_PERMISSION";
-      event->error_target = m_account ? m_account->nick() : ("#" + m_channel->name());
+      event->error_target = m_account->nick();
       event->error_key = key;
       return;
     }
 
-    kv.remove(key);
+    remove(key);
     event->metadata[key] = QVariant();
     return;
   }
 
   if (cmd == "LIST") {
-    // populate all keys
+    QReadLocker rlock(&mtx_lock);
     for (auto it = kv.constBegin(); it != kv.constEnd(); ++it) {
       event->metadata[it.key()] = it.value();
     }
@@ -64,6 +112,8 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
   }
 
   if (cmd == "GET") {
+    QReadLocker rlock(&mtx_lock);
+
     // populate only requested keys
     for (const auto &key : args) {
       if (kv.contains(key)) {
@@ -75,22 +125,24 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
   }
 
   if (cmd == "SUB") {
-    for (const auto &a : args) {
-      QByteArray key = a;
-      subscribers[key].insert(event->account);
+    auto &keys = args;
+
+    sub(event->account, keys);
+
+    for (const auto&key : keys)
       event->subscriptions[key].insert(event->account);
-    }
+
     return;
   }
 
   if (cmd == "UNSUB") {
-    for (const auto &a : args) {
-      QByteArray key = a;
-      if (subscribers.contains(key)) {
-        subscribers[key].remove(event->account);
-        event->subscriptions[key].remove(event->account);
-      }
-    }
+    auto &keys = args;
+
+    unsub(event->account, keys);
+
+    for (const auto&key : keys)
+      event->subscriptions[key].insert(event->account);
+
     return;
   }
 
@@ -104,39 +156,57 @@ void Metadata::handle(const QSharedPointer<QEventMetadata> &event) {
   }
 }
 
-QVariant Metadata::get(const QString &key) const {
-  return kv.value(key, QVariant());
-}
-
 QMap<QString, QVariant> Metadata::list() const {
+  QReadLocker rlock(&mtx_lock);
   return kv;
 }
 
-bool Metadata::clear(const QString &key, const QSharedPointer<Account> &actor) {
-  if (!kv.contains(key))
-    return false;
-  kv.remove(key);
-  emit changed(key, QVariant());
-  return true;
-}
+void Metadata::sub(const QSharedPointer<Account> &actor, const QList<QByteArray> &keys) {
+  QWriteLocker rlock(&mtx_lock);
 
-void Metadata::sub(const QSharedPointer<Account> &actor, const QList<QString> &keys) {
   for (const auto &k: keys)
     subscribers[k].insert(actor);
+
+  QUuid ref_id;
+  if (!m_account.isNull()) {
+    ref_id = m_account->uid();
+  } else {
+    ref_id = m_channel->uid;
+  }
+
+  sql::metadata_subscribe_bulk(ref_id, keys, actor->uid());
 }
 
-void Metadata::unsub(const QSharedPointer<Account> &actor, const QList<QString> &keys) {
+void Metadata::unsub(const QSharedPointer<Account> &actor, const QList<QByteArray> &keys) {
+  QWriteLocker rlock(&mtx_lock);
+
+  QUuid ref_id;
+  if (!m_account.isNull()) {
+    ref_id = m_account->uid();
+  } else {
+    ref_id = m_channel->uid;
+  }
+
   for (const auto &k: keys) {
     if (subscribers.contains(k))
       subscribers[k].remove(actor);
   }
+
+  sql::metadata_unsubscribe_bulk(ref_id, keys, actor->uid());
 }
 
 QSet<QString> Metadata::subs(const QSharedPointer<Account> &actor) const {
+  // ??
   QSet<QString> result;
   for (auto it = subscribers.constBegin(); it != subscribers.constEnd(); ++it) {
     if (it.value().contains(actor))
       result.insert(it.key());
   }
   return result;
+}
+
+QUuid Metadata::ref_id() const {
+  if (!m_account.isNull())
+    return m_account->uid();
+  return m_channel->uid;
 }

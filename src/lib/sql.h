@@ -26,14 +26,14 @@ namespace sql {
     Account
 };
 
-  enum LoginResult {
+  enum class LoginResult {
     Success,
     AccountNotFound,
     InvalidPassword,
     DatabaseError
   };
 
-  enum EventType {
+  enum class EventType {
     Message = 0,
     ChannelJoin = 1,
     ChannelLeave = 2
@@ -50,10 +50,13 @@ namespace sql {
   // @TODO: deal with the removal of the resource backing ref_id
   MetadataResult metadata_get(QUuid ref_id);
   bool metadata_modify(QUuid ref_id, const QByteArray& key, const QByteArray& new_value);
-  bool metadata_remove(QUuid ref_id, const QByteArray& key);
+  bool metadata_remove(const QByteArray& key, QUuid ref_id);
   QUuid metadata_create(const QByteArray& key, const QByteArray& value, const QUuid ref_id, RefType ref_type);
+  bool metadata_upsert(const QByteArray& key, const QByteArray& value, QUuid ref_id, RefType ref_type);
   bool metadata_unsubscribe(QUuid ref_id, const QByteArray& key, QUuid account_id);
   bool metadata_subscribe(QUuid ref_id, const QByteArray& key, QUuid account_id);
+  bool metadata_subscribe_bulk(QUuid ref_id, const QList<QByteArray>& keys, QUuid account_id);
+  bool metadata_unsubscribe_bulk(QUuid ref_id, const QList<QByteArray>& keys, QUuid account_id);
 
   // account
   QSharedPointer<Account> account_get_or_create(const QByteArray &username, const QByteArray &password);

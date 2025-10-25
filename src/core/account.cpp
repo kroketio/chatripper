@@ -285,7 +285,7 @@ void Account::merge(const QSharedPointer<Account> &from) {
 }
 
 Account::~Account() {
-  qDebug() << "RIP account" << m_name;
+  qDebug() << "RIP account";
 }
 
 void Account::add_channel(const QByteArray& channel) {
