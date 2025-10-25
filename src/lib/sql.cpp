@@ -211,6 +211,41 @@ namespace sql {
     )
     )");
 
+    exec(R"(
+    CREATE TYPE ref_type_enum AS ENUM ('channel', 'account');
+
+    CREATE TABLE IF NOT EXISTS metadata (
+      id UUID PRIMARY KEY,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      ref_id UUID NOT NULL,
+      ref_type ref_type_enum NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      modified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    )");
+
+    exec(R"(
+    CREATE TABLE IF NOT EXISTS metadata_subs (
+      id UUID PRIMARY KEY,
+      metadata_id UUID NOT NULL,
+      account_id UUID NOT NULL,
+      FOREIGN KEY(metadata_id) REFERENCES metadata(id) ON DELETE CASCADE,
+      FOREIGN KEY(account_id) REFERENCES accounts(id) ON DELETE CASCADE
+    )
+    )");
+
+    // Indices for metadata table
+    exec("CREATE INDEX IF NOT EXISTS idx_metadata_ref ON metadata(ref_id, ref_type)");
+    exec("CREATE INDEX IF NOT EXISTS idx_metadata_ref_key ON metadata(ref_id, ref_type, key)");
+    exec("CREATE INDEX IF NOT EXISTS idx_metadata_created_at ON metadata(created_at DESC)");
+    exec("CREATE INDEX IF NOT EXISTS idx_metadata_modified_at ON metadata(modified_at DESC)");
+
+    // Indices for metadata_subs table
+    exec("CREATE INDEX IF NOT EXISTS idx_metadata_subs_metadata ON metadata_subs(metadata_id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_metadata_subs_account ON metadata_subs(account_id)");
+    exec("CREATE INDEX IF NOT EXISTS idx_metadata_subs_metadata_account ON metadata_subs(metadata_id, account_id)");
+
     // Optional indexes for filtering and performance
     exec("CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(sender_id)");
     exec("CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel_id)");
@@ -265,6 +300,185 @@ namespace sql {
 
     // Index for uploads by account_owner
     exec("CREATE INDEX IF NOT EXISTS idx_uploads_account_owner ON uploads(account_owner_id)");
+  }
+
+  QUuid metadata_create(const QByteArray& key, const QByteArray& value, const QUuid ref_id, RefType ref_type) {
+    const auto q = getQuery();
+
+    q->prepare(R"(
+      INSERT INTO metadata (
+        id, key, value, ref_id, ref_type
+      ) VALUES (?, ?, ?, ?, ?)
+    )");
+
+    const auto uuid = QUuid::createUuid();
+
+    q->addBindValue(uuid);                     // id
+    q->addBindValue(QString::fromUtf8(key));   // key
+    q->addBindValue(QString::fromUtf8(value)); // value
+    q->addBindValue(ref_id);                   // ref_id
+
+    // enum
+    QString ref_type_str;
+    switch(ref_type) {
+      case RefType::Channel: ref_type_str = "channel"; break;
+      case RefType::Account: ref_type_str = "account"; break;
+    }
+    q->addBindValue(ref_type_str);       // ref_type
+
+    if (!q->exec()) {
+      qWarning() << "Failed to insert metadata:" << q->lastError().text();
+      return {};
+    }
+
+    return uuid;
+  }
+
+  MetadataResult metadata_get(const QUuid ref_id) {
+    MetadataResult result;
+    const auto q = getQuery();
+
+    q->prepare(R"(
+      SELECT m.key, m.value, ms.account_id
+      FROM metadata m
+      LEFT JOIN metadata_subs ms ON ms.metadata_id = m.id
+      WHERE m.ref_id = ?
+    )");
+
+    q->addBindValue(ref_id);
+
+    if (!q->exec()) {
+      qWarning() << "failed to fetch metadata:" << q->lastError().text();
+      return result;
+    }
+
+    while (q->next()) {
+      const QString key = q->value("key").toString();
+      const QVariant value = q->value("value");
+
+      // set key/value
+      result.keyValues.insert(key, value);
+
+      // handle subscribers
+      const auto account_id = q->value("account_id").toUuid();
+      if (account_id.isNull())
+        continue;
+
+      auto account_ptr = Ctx::instance()->accounts_lookup_uuid.value(account_id);
+      if (!account_ptr)
+        continue;
+
+      result.subscribers[key].insert(account_ptr);
+    }
+
+    return result;
+  }
+
+  bool metadata_remove(QUuid ref_id, const QByteArray& key) {
+    const auto q = getQuery();
+
+    q->prepare(R"(
+      DELETE FROM metadata
+      WHERE ref_id = ? AND key = ?
+    )");
+
+    q->addBindValue(ref_id);
+    q->addBindValue(QString::fromUtf8(key));
+
+    if (!q->exec()) {
+      qWarning() << "Failed to remove metadata:" << q->lastError().text();
+      return false;
+    }
+
+    return true;
+  }
+
+  bool metadata_modify(QUuid ref_id, const QByteArray& key, const QByteArray& new_value) {
+    const auto q = getQuery();
+
+    q->prepare(R"(
+    UPDATE metadata
+    SET value = ?, modified_at = CURRENT_TIMESTAMP
+    WHERE ref_id = ? AND key = ?
+  )");
+
+    q->addBindValue(QString::fromUtf8(new_value));
+    q->addBindValue(ref_id);
+    q->addBindValue(QString::fromUtf8(key));
+
+    if (!q->exec()) {
+      qWarning() << "Failed to modify metadata:" << q->lastError().text();
+      return false;
+    }
+
+    return true;
+  }
+
+  bool metadata_subscribe(QUuid ref_id, const QByteArray& key, QUuid account_id) {
+    const auto q1 = getQuery();
+      q1->prepare(R"(
+      SELECT id FROM metadata
+      WHERE ref_id = ? AND key = ?
+    )");
+    q1->addBindValue(ref_id);
+    q1->addBindValue(QString::fromUtf8(key));
+
+    if (!q1->exec() || !q1->next()) {
+      qWarning() << "Failed to find metadata for subscription:" << q1->lastError().text();
+      return false;
+    }
+
+    const QUuid metadata_id = q1->value("id").toUuid();
+
+    const auto q2 = getQuery();
+    q2->prepare(R"(
+      INSERT INTO metadata_subs (id, metadata_id, account_id)
+      VALUES (?, ?, ?)
+      ON CONFLICT (metadata_id, account_id) DO NOTHING
+    )");
+
+    q2->addBindValue(QUuid::createUuid());
+    q2->addBindValue(metadata_id);
+    q2->addBindValue(account_id);
+
+    if (!q2->exec()) {
+      qWarning() << "Failed to subscribe account to metadata:" << q2->lastError().text();
+      return false;
+    }
+
+    return true;
+  }
+
+  bool metadata_unsubscribe(QUuid ref_id, const QByteArray& key, QUuid account_id) {
+    const auto q1 = getQuery();
+      q1->prepare(R"(
+      SELECT id FROM metadata
+      WHERE ref_id = ? AND key = ?
+    )");
+    q1->addBindValue(ref_id);
+    q1->addBindValue(QString::fromUtf8(key));
+
+    if (!q1->exec() || !q1->next()) {
+      qWarning() << "Failed to find metadata for unsubscription:" << q1->lastError().text();
+      return false;
+    }
+
+    const QUuid metadata_id = q1->value("id").toUuid();
+
+    const auto q2 = getQuery();
+      q2->prepare(R"(
+      DELETE FROM metadata_subs
+      WHERE metadata_id = ? AND account_id = ?
+    )");
+    q2->addBindValue(metadata_id);
+    q2->addBindValue(account_id);
+
+    if (!q2->exec()) {
+      qWarning() << "Failed to unsubscribe account from metadata:" << q2->lastError().text();
+      return false;
+    }
+
+    return true;
   }
 
   QUuid insert_message(const QSharedPointer<QEventMessage>& msg) {

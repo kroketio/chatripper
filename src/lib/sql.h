@@ -16,6 +16,16 @@
 namespace sql {
   extern std::unordered_map<unsigned long, QSqlDatabase*> DB_INSTANCES;
 
+  struct MetadataResult {
+    QMap<QString, QVariant> keyValues;
+    QMap<QString, QSet<QSharedPointer<Account>>> subscribers;
+  };
+
+  enum class RefType {
+    Channel,
+    Account
+};
+
   enum LoginResult {
     Success,
     AccountNotFound,
@@ -35,6 +45,15 @@ namespace sql {
   QSharedPointer<QSqlQuery> exec(const QSharedPointer<QSqlQuery> &q);
   void create_schema();
   bool preload_from_file(const QString &path);
+
+  // metadata
+  // @TODO: deal with the removal of the resource backing ref_id
+  MetadataResult metadata_get(QUuid ref_id);
+  bool metadata_modify(QUuid ref_id, const QByteArray& key, const QByteArray& new_value);
+  bool metadata_remove(QUuid ref_id, const QByteArray& key);
+  QUuid metadata_create(const QByteArray& key, const QByteArray& value, const QUuid ref_id, RefType ref_type);
+  bool metadata_unsubscribe(QUuid ref_id, const QByteArray& key, QUuid account_id);
+  bool metadata_subscribe(QUuid ref_id, const QByteArray& key, QUuid account_id);
 
   // account
   QSharedPointer<Account> account_get_or_create(const QByteArray &username, const QByteArray &password);
