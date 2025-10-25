@@ -27,15 +27,17 @@ namespace sql {
     const QString connection_name = "cr_" + QString::number(thread_id);
     auto* db = new QSqlDatabase(QSqlDatabase::addDatabase("QPSQL", connection_name));
     db->setConnectOptions(QString("application_name=%1").arg(connection_name));
-    db->setHostName("127.0.0.1");
-    db->setPort(5432);
-    db->setDatabaseName("chatripper");
-    db->setUserName("postgres");
-    // db->setPassword("");
-    qDebug() << "created connection to db";
+    db->setHostName(g::pgHost);
+    db->setPort(g::pgPort);
+    db->setDatabaseName(g::pgDatabase);
+    db->setUserName(g::pgUsername);
+    if (!g::pgPassword.isEmpty())
+      db->setPassword(g::pgPassword);
 
     if (!db->open())
       throw std::runtime_error("failed to open database");
+
+    qDebug() << "db: created connection" << connection_name;
 
     DB_INSTANCES[thread_id] = db;
     return QSharedPointer<QSqlQuery>(new QSqlQuery(*db));

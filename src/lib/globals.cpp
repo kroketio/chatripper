@@ -10,7 +10,6 @@ namespace g {
   QString cacheDirectory;
   QString staticDirectory;
   QByteArray defaultHost;
-  QFileInfo pathDatabase;
   QFileInfo pathDatabasePreload;
   QByteArray irc_motd;
   unsigned int irc_motd_size;
@@ -23,4 +22,15 @@ namespace g {
   WebSessionStore* webSessions = nullptr;
   QThread* mainThread = nullptr;
   Ctx* ctx = nullptr;
+  // pg
+  QString pgHost;
+  quint16 pgPort;
+  QString pgUsername;
+  QString pgPassword;
+  QString pgDatabase;
+  // meilisearch
+  bool msEnabled = false;
+  QString msHost;
+  quint16 msPort;
+  QString msApiKey;
 }

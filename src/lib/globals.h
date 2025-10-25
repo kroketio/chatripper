@@ -11,6 +11,7 @@ namespace g {
   extern QString configRoot;
   extern QString homeDir;
   extern QString configDirectory;
+  extern QFileInfo pathDatabasePreload;
   extern QString pythonModulesDirectory;
   extern QString uploadsDirectory;
   extern QString cacheDirectory;
@@ -24,9 +25,18 @@ namespace g {
   extern quint16 wsServerListeningPort;
   extern unsigned int irc_motd_size;
   extern time_t irc_motd_last_modified;
-  extern QFileInfo pathDatabase;
-  extern QFileInfo pathDatabasePreload;
   extern WebSessionStore* webSessions;
   extern QThread* mainThread;
   extern Ctx* ctx;
+  // pg
+  extern QString pgHost;
+  extern quint16 pgPort;
+  extern QString pgUsername;
+  extern QString pgPassword;
+  extern QString pgDatabase;
+  // meilisearch
+  extern bool msEnabled;
+  extern QString msHost;
+  extern quint16 msPort;
+  extern QString msApiKey;
 }
